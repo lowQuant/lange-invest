@@ -50,33 +50,35 @@
 }
 
 [data-bs-theme="light"] {
-    --bg-0: #faf9f6;  --bg-1: #ffffff;  --bg-2: #f4f3ef;  --bg-3: #ecebe6;  --bg-4: #dbdad4;
-    --line-1: #ececea; --line-2: #dbdad4; --line-3: #b5b4ae;
-    --ink-1: #14171b;  --ink-2: #4b5260; --ink-3: #6e7585; --ink-4: #9ea3ad;
+    /* Cool, crisp neutrals — clean modern light surface (not cream). */
+    --bg-0: #f6f7f9;  --bg-1: #ffffff;  --bg-2: #f1f3f6;  --bg-3: #e8ebef;  --bg-4: #dde1e7;
+    --line-1: #eef0f3; --line-2: #e2e6eb; --line-3: #c7cdd6;
+    --ink-1: #14181f;  --ink-2: #475063; --ink-3: #6b7486; --ink-4: #9aa2b1;
 
-    --accent: #b45309; --accent-hi: #92400e;
-    --accent-dim: rgba(180, 83, 9, 0.10);
-    --accent-line: rgba(180, 83, 9, 0.35);
-    --accent-glow: rgba(180, 83, 9, 0.18);
+    /* Cool indigo accent — calmer and more contemporary than amber on light. */
+    --accent: #4f46e5; --accent-hi: #4338ca;
+    --accent-dim: rgba(79, 70, 229, 0.09);
+    --accent-line: rgba(79, 70, 229, 0.32);
+    --accent-glow: rgba(79, 70, 229, 0.16);
 
-    --up: #15803d;  --up-dim: rgba(21, 128, 61, 0.10);
-    --down: #b91c1c; --down-dim: rgba(185, 28, 28, 0.10);
-    --info: #1d4ed8; --info-hi: #1e40af; --info-dim: rgba(29, 78, 216, 0.08);
+    --up: #0f9d58;  --up-dim: rgba(15, 157, 88, 0.10);
+    --down: #d93737; --down-dim: rgba(217, 55, 55, 0.10);
+    --info: #2563eb; --info-hi: #1d4ed8; --info-dim: rgba(37, 99, 235, 0.08);
 
-    --long: #15803d; --short: #b91c1c;
+    --long: #0f9d58; --short: #d93737;
 
-    --chart-grid: rgba(0, 0, 0, 0.05);
-    --chart-tick: #6e7585; --chart-text: #14171b; --chart-title: #4b5260;
-    --chart-tooltip-bg: #ffffff; --chart-tooltip-border: #dbdad4;
-    --chart-zoom-fill: rgba(180, 83, 9, 0.10); --chart-zoom-line: #b45309;
+    --chart-grid: rgba(20, 24, 31, 0.06);
+    --chart-tick: #6b7486; --chart-text: #14181f; --chart-title: #475063;
+    --chart-tooltip-bg: #ffffff; --chart-tooltip-border: #e2e6eb;
+    --chart-zoom-fill: rgba(79, 70, 229, 0.10); --chart-zoom-line: #4f46e5;
 
-    --bg-grad: radial-gradient(800px 500px at 100% -100px, rgba(180,83,9,0.04), transparent 60%);
+    --bg-grad: radial-gradient(900px 520px at 100% -120px, rgba(79,70,229,0.05), transparent 62%);
 
     --bs-body-bg: var(--bg-0); --bs-body-color: var(--ink-1);
     --bs-secondary-bg: var(--bg-2); --bs-tertiary-bg: var(--bg-1);
     --bs-border-color: var(--line-2); --bs-border-color-translucent: var(--line-2);
-    --bs-primary-rgb: 180, 83, 9; --bs-info-rgb: 29, 78, 216;
-    --bs-success-rgb: 21, 128, 61; --bs-danger-rgb: 185, 28, 28; --bs-warning-rgb: 180, 83, 9;
+    --bs-primary-rgb: 79, 70, 229; --bs-info-rgb: 37, 99, 235;
+    --bs-success-rgb: 15, 157, 88; --bs-danger-rgb: 217, 55, 55; --bs-warning-rgb: 245, 165, 36;
 }
 
 /* ─────────────── Base ─────────────── */

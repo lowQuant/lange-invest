@@ -36,18 +36,15 @@
 </div>
 
 <div class="qt-grid" style="grid-template-columns: 2fr 1fr;">
-    {# ── Live signals — gated component (HTMX fragment, access-wall fallback) ── #}
+    {# ── Methodology ── #}
     <div class="qt-panel">
-        <div class="qt-panel-head">
-            <span class="qt-panel-head-title"><i class="bi bi-broadcast-pin"></i> Live signals</span>
-            <span class="badge bg-secondary">members</span>
-        </div>
-        <div class="qt-panel-body"
-             hx-get="/gated/strategy/{{ asset_class.slug }}/{{ variant.slug }}/signals"
-             hx-trigger="load"
-             hx-swap="innerHTML">
-            {# Server-rendered fallback shown until the fragment loads/!entitled. #}
-            {% include "partials/access_wall.html" %}
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-journal-text"></i> Methodology</span></div>
+        <div class="qt-panel-body">
+            {% if variant.methodology %}
+            <p class="mb-0" style="line-height:1.7; color: var(--ink-1);">{{ variant.methodology }}</p>
+            {% else %}
+            <p class="mb-0" style="line-height:1.7;">{{ variant.blurb }}</p>
+            {% endif %}
         </div>
     </div>
 

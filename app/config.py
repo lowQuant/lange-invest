@@ -26,6 +26,7 @@ class Variant:
     slug: str
     name: str
     blurb: str
+    methodology: str
     signals_symbol: str
     stats_symbol: str
 
@@ -69,6 +70,7 @@ def _load() -> SiteConfig:
                 slug=v["slug"],
                 name=v["name"],
                 blurb=v.get("blurb", ""),
+                methodology=v.get("methodology", ""),
                 signals_symbol=v.get("signals_symbol", v["slug"].replace("-", "_")),
                 stats_symbol=v.get("stats_symbol", v["slug"].replace("-", "_")),
             )

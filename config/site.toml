@@ -48,33 +48,37 @@ protected_libraries = [
 slug = "equities"
 name = "Equities"
 icon = "bi-bar-chart-line"
-blurb = "US equity strategies — mean reversion, momentum, and structural tilts."
+blurb = "Four equity books on a liquid US universe — one for reversion, one for trend, a short sleeve, and the blend that combines them."
 
   [[asset_class.variant]]
   slug = "mean-reversion"
   name = "Mean Reversion"
-  blurb = "Short-horizon counter-trend entries on oversold liquid names."
+  blurb = "Buys liquid names after sharp, news-light selloffs and exits as they normalise."
+  methodology = "Each day we rank the universe by short-horizon drawdown relative to its own volatility and enter the most oversold names that still pass a liquidity and trend-quality filter. Positions are equal-risk weighted and exit on mean reversion or a fixed time stop, so holding periods stay measured in days rather than weeks."
   signals_symbol = "mean_reversion"
   stats_symbol = "mean_reversion"
 
   [[asset_class.variant]]
-  slug = "short"
-  name = "Short"
-  blurb = "Systematic short book targeting deteriorating fundamentals and trend."
-  signals_symbol = "short"
-  stats_symbol = "short"
-
-  [[asset_class.variant]]
   slug = "long"
   name = "Long"
-  blurb = "Long book of quality names with positive trend and momentum."
+  blurb = "Holds quality companies in confirmed uptrends and steps aside when trend breaks."
+  methodology = "A long-only book that scores the universe on trend persistence and momentum, then holds the leaders subject to a quality screen. Exposure scales down as breadth deteriorates, so the book spends weak markets in cash rather than fighting the tape."
   signals_symbol = "long"
   stats_symbol = "long"
 
   [[asset_class.variant]]
+  slug = "short"
+  name = "Short"
+  blurb = "A risk-managed short sleeve that hedges the book when trend and breadth roll over."
+  methodology = "The short sleeve targets names in confirmed downtrends with weakening fundamentals, sized to cushion the long book in drawdowns rather than to carry the return on its own. Borrow cost and crowding checks keep the basket tradable."
+  signals_symbol = "short"
+  stats_symbol = "short"
+
+  [[asset_class.variant]]
   slug = "base"
   name = "Base"
-  blurb = "The combined base allocation blending the sub-strategies."
+  blurb = "The combined equity allocation that blends reversion, long, and short into one book."
+  methodology = "Base is the production equity allocation: the sub-strategies are combined at the portfolio level so their returns offset rather than compound risk. Weights are set by each sleeve's risk contribution and rebalanced on a fixed cadence."
   signals_symbol = "base"
   stats_symbol = "base"
 
@@ -82,25 +86,28 @@ blurb = "US equity strategies — mean reversion, momentum, and structural tilts
 slug = "futures"
 name = "Futures"
 icon = "bi-graph-up-arrow"
-blurb = "Continuously-rolled futures programs across the liquid global complex."
+blurb = "Continuously-rolled futures programs across the liquid global complex — equity index, rates, FX, energy, and metals."
 
   [[asset_class.variant]]
   slug = "trend"
   name = "Trend"
-  blurb = "Classic time-series momentum across the continuous-roll series."
+  blurb = "Time-series momentum that goes long winners and short losers across the whole complex."
+  methodology = "Classic time-series momentum: each market is sized long or short by the sign and strength of its own multi-horizon trend, scaled to a common risk target so no single market dominates. Diversification across roughly two dozen liquid contracts does the heavy lifting."
   signals_symbol = "trend"
   stats_symbol = "trend"
 
   [[asset_class.variant]]
   slug = "carry"
   name = "Carry"
-  blurb = "Cross-sectional carry harvested from the term structure."
+  blurb = "Harvests the roll yield embedded in each market's term structure, long and short."
+  methodology = "A cross-sectional carry book that is long markets in backwardation and short those in contango, ranked by roll yield net of estimated cost. Positions are risk-weighted and netted against the trend book so the two programs share margin efficiently."
   signals_symbol = "carry"
   stats_symbol = "carry"
 
   [[asset_class.variant]]
   slug = "continuous-roll"
   name = "Continuous Roll"
-  blurb = "Roll-rule-aware continuous series and front-month construction."
+  blurb = "The roll-rule engine that stitches expiring contracts into one clean, tradable series."
+  methodology = "Every futures strategy here trades a continuous series built by an explicit roll rule — front-month with a volume/open-interest trigger and a back-adjustment for the price gap at each roll. This page documents that construction so the backtests above are reproducible rather than a black box."
   signals_symbol = "continuous_roll"
   stats_symbol = "continuous_roll"

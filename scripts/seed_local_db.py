@@ -106,6 +106,36 @@ def main() -> None:
     for i, (root, base) in enumerate(FUT_ROOTS.items()):
         fut.write(root, futures_multiindex(seed=200 + i, base=base, root=root))
     print(f"futures (MultiIndex): {list(FUT_ROOTS)}")
+
+    # universe library: side-pane metadata (library `futures` → symbol `Futures`).
+    if ac.has_library("universe"):
+        ac.delete_library("universe")
+    ac.create_library("universe")
+    uni = ac["universe"]
+    fut_meta = {
+        "ES": ("E-mini S&P 500", "CME", "Equity Index", "USD", 50, 0.25),
+        "NQ": ("E-mini Nasdaq 100", "CME", "Equity Index", "USD", 20, 0.25),
+        "CL": ("WTI Crude Oil", "NYMEX", "Energy", "USD", 1000, 0.01),
+        "GC": ("Gold", "COMEX", "Metals", "USD", 100, 0.10),
+        "ZN": ("10-Year T-Note", "CBOT", "Rates", "USD", 1000, 0.015625),
+        "6E": ("Euro FX", "CME", "FX", "USD", 125000, 0.00005),
+    }
+    uni.write("Futures", pd.DataFrame(
+        [{"symbol": k, "name": n, "exchange": ex, "sector": s, "currency": c,
+          "multiplier": m, "tick_size": t} for k, (n, ex, s, c, m, t) in fut_meta.items()]))
+    stk_meta = {
+        "AAPL": ("Apple Inc.", "NASDAQ", "Technology"),
+        "MSFT": ("Microsoft Corp.", "NASDAQ", "Technology"),
+        "NVDA": ("NVIDIA Corp.", "NASDAQ", "Semiconductors"),
+        "AMZN": ("Amazon.com Inc.", "NASDAQ", "Consumer Disc."),
+        "GOOGL": ("Alphabet Inc.", "NASDAQ", "Communication"),
+        "META": ("Meta Platforms", "NASDAQ", "Communication"),
+        "JPM": ("JPMorgan Chase", "NYSE", "Financials"),
+    }
+    uni.write("Market_data", pd.DataFrame(
+        [{"symbol": k, "name": n, "exchange": ex, "sector": s, "currency": "USD"}
+         for k, (n, ex, s) in stk_meta.items()]))
+    print("universe: Futures, Market_data")
     print(f"done → {URI}")
 
 

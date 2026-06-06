@@ -10,6 +10,9 @@
 {% if error %}
     <div class="alert alert-info">{{ error }}</div>
 {% else %}
+<div id="ws-layout">
+<div id="ws-main">
+
 <div class="page-head">
     <div>
         <span class="eyebrow"><i class="bi bi-graph-up"></i> {{ library }} · symbol</span>
@@ -25,15 +28,22 @@
     {% endif %}
 </div>
 
-{% if is_admin %}
-<div class="d-flex gap-1 mb-3">
+{# ── Action toolbar ── #}
+<div class="d-flex gap-1 mb-3 flex-wrap">
+    <button id="chart-btn" class="btn btn-sm btn-outline-info" onclick="toggleChart()"><i class="bi bi-graph-up"></i> Chart</button>
+    <button id="sp-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePane()"><i class="bi bi-layout-sidebar-reverse"></i> Side pane</button>
+    {% if is_admin %}
+    <span style="width:1px;background:var(--line-2);margin:0 .25rem;"></span>
     <button class="btn btn-sm btn-outline-success" data-bs-toggle="collapse" data-bs-target="#add-row"><i class="bi bi-plus-lg"></i> Add row</button>
     <button class="btn btn-sm btn-outline-danger"
             hx-delete="/arcticdb/api/symbol/{{ library }}/{{ symbol }}"
             hx-confirm="Delete symbol '{{ symbol }}'? This cannot be undone."
             hx-on::after-request="if(event.detail.successful) window.location.href='/arcticdb/{{ library }}'">
         <i class="bi bi-trash"></i> Delete symbol</button>
+    {% endif %}
 </div>
+
+{% if is_admin %}
 <div class="collapse mb-3" id="add-row">
     <div class="qt-panel">
         <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-plus-circle"></i> Insert row</span></div>
@@ -54,7 +64,8 @@
 </div>
 {% endif %}
 
-{# ── Chart panel ── #}
+{# ── Chart (collapsed by default; a dedicated charts section comes later) ── #}
+<div id="chart-wrap" style="display:none;">
 <div class="qt-panel mb-3">
     <div class="qt-panel-head" style="flex-direction:column; align-items:stretch; padding:0;">
         <div class="ac-toolbar">
@@ -87,6 +98,7 @@
                     <option value="M">Monthly</option><option value="Q">Quarterly</option><option value="Y">Yearly</option>
                 </select>
             </span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleChart()" title="Hide chart"><i class="bi bi-x-lg"></i></button>
         </div>
 
         {% if meta and meta.is_multiindex %}
@@ -140,26 +152,11 @@
                 {% endfor %}
             </div>
         </div>
-
-        <div class="ac-toolbar">
-            <span class="ac-lbl">Studies</span>
-            <div id="ac-studies" class="d-flex gap-1 flex-wrap"></div>
-            <div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Study</button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',20);return false">SMA (20)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',50);return false">SMA (50)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',200);return false">SMA (200)</a></li>
-                    <li><hr class="dropdown-divider"></li>
-                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',12);return false">EMA (12)</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',26);return false">EMA (26)</a></li>
-                </ul>
-            </div>
-        </div>
     </div>
     <div class="qt-panel-body" id="chart-area">
         <div class="text-center py-5"><div class="spinner-border spinner-border-sm"></div> <span class="label-mono ms-2">Loading chart…</span></div>
     </div>
+</div>
 </div>
 
 {# ── Data table ── #}
@@ -170,12 +167,33 @@
         <div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>
     </div>
 </div>
+
+</div><!-- /ws-main -->
+
+{# ── Side pane (ported from arcticdb-viewer) ── #}
+<div id="side-pane" style="display:none;">
+    <div class="side-pane-head">
+        <span class="side-pane-title"><i class="bi bi-layout-sidebar-reverse"></i> Side pane</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="toggleSidePane()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div id="sidepane-content" style="padding:.75rem;">
+        <div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>
+    </div>
+</div>
+
+</div><!-- /ws-layout -->
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 {% if not error %}
 <style>
+    #ws-layout { display:flex; gap:.875rem; align-items:flex-start; }
+    #ws-main { flex:1; min-width:0; }
+    #side-pane { flex:0 0 360px; width:360px; background:var(--bg-1); border:1px solid var(--line-2); border-radius:var(--radius); position:sticky; top:64px; max-height:calc(100vh - 84px); overflow:auto; }
+    .side-pane-head { display:flex; align-items:center; justify-content:space-between; padding:.5rem .75rem; border-bottom:1px solid var(--line-2); position:sticky; top:0; background:var(--bg-1); z-index:2; }
+    .side-pane-title { font-family:var(--mono); font-size:.6875rem; font-weight:500; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-2); display:flex; align-items:center; gap:.5rem; }
+    .side-pane-title .bi { color:var(--ink-3); }
     .ac-toolbar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.45rem .75rem; border-bottom:1px solid var(--line-1); }
     .ac-toolbar:last-of-type { border-bottom:1px solid var(--line-2); }
     .ac-group { display:flex; align-items:center; gap:.35rem; }
@@ -186,6 +204,7 @@
     .metric-mini { display:flex; flex-direction:column; }
     .metric-mini .v { font-family:var(--mono); font-size:.875rem; color:var(--ink-1); font-variant-numeric:tabular-nums; }
     .metric-mini .l { font-family:var(--mono); font-size:.6rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-3); }
+    @media (max-width: 900px) { #ws-layout { flex-direction:column; } #side-pane { width:100%; flex:none; position:static; max-height:none; } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
@@ -193,11 +212,10 @@
 <script>
 const LIB = {{ library | tojson }}, SYM = {{ symbol | tojson }};
 const IS_MULTI = {{ 'true' if meta and meta.is_multiindex else 'false' }};
-let studies = [];
+const enc = encodeURIComponent;
 
 function isContract() { const s = document.getElementById("ac-source"); return IS_MULTI && (!s || s.value === "contract"); }
 function selY() { return Array.from(document.querySelectorAll(".ac-y:checked")).map(c => c.value); }
-
 function onType() { syncY(); draw(); }
 function onSource() {
     const c = isContract();
@@ -218,47 +236,65 @@ function syncY() {
     ybar.style.display = show ? "" : "none";
     if (show && selY().length === 0) {
         const close = Array.from(document.querySelectorAll(".ac-y")).find(c => c.value.toLowerCase() === "close");
-        (close || document.querySelector(".ac-y")) && ((close || document.querySelector(".ac-y")).checked = true);
+        const cb = close || document.querySelector(".ac-y"); if (cb) cb.checked = true;
     }
 }
-function addStudy(t, p) { studies.push({type:t, period:p}); renderStudies(); draw(); }
-function rmStudy(i) { studies.splice(i,1); renderStudies(); draw(); }
-function renderStudies() {
-    document.getElementById("ac-studies").innerHTML = studies.map((s,i) =>
-        `<span class="badge bg-info">${s.type.toUpperCase()}(${s.period}) <a href="#" onclick="rmStudy(${i});return false" style="color:inherit;">×</a></span>`).join("");
-}
-
 function draw() {
+    if (document.getElementById("chart-wrap").style.display === "none") return;  // only when expanded
     const type = document.getElementById("ac-type").value;
     const period = document.getElementById("ac-period").value;
-    let url = `/arcticdb/api/chart/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}?chart_type=${type}`;
+    let url = `/arcticdb/api/chart/${enc(LIB)}/${enc(SYM)}?chart_type=${type}`;
     if (period) url += `&period=${period}`;
     if (isContract()) {
         const m = document.getElementById("ac-cmode").value;
-        url += `&contract_mode=${m}&contract_col=${encodeURIComponent(document.getElementById("ac-col").value)}`;
+        url += `&contract_mode=${m}&contract_col=${enc(document.getElementById("ac-col").value)}`;
         if (m === "single") url += `&contract_rank=${document.getElementById("ac-rank").value}`;
-        else { url += `&spread_rank1=${document.getElementById("ac-r1").value}&spread_rank2=${document.getElementById("ac-r2").value}`; }
+        else url += `&spread_rank1=${document.getElementById("ac-r1").value}&spread_rank2=${document.getElementById("ac-r2").value}`;
         if (m !== "spread") url += `&continuous_method=${document.getElementById("ac-method").value}&roll_rule=${document.getElementById("ac-roll").value}`;
     } else {
-        url += `&x_col=${encodeURIComponent(document.getElementById("ac-x").value)}`;
+        url += `&x_col=${enc(document.getElementById("ac-x").value)}`;
         if (type !== "candlestick") {
             const y = selY();
-            if (y.length === 0) { document.getElementById("chart-area").innerHTML = '<div class="text-center py-5 label-mono" style="color:var(--ink-4)">Pick at least one Y column.</div>'; return; }
-            url += `&y_cols=${encodeURIComponent(y.join(","))}`;
+            if (!y.length) { document.getElementById("chart-area").innerHTML = '<div class="text-center py-5 label-mono" style="color:var(--ink-4)">Pick at least one Y column.</div>'; return; }
+            url += `&y_cols=${enc(y.join(","))}`;
         }
     }
-    if (studies.length) url += `&studies=${encodeURIComponent(JSON.stringify(studies))}`;
     htmx.ajax("GET", url, "#chart-area");
 }
 
-document.addEventListener("themechange", () => setTimeout(draw, 50));
-// Single initial draw: onSource()/onCMode() already call draw() for multiindex.
-document.addEventListener("DOMContentLoaded", () => { if (IS_MULTI) { onSource(); } else { syncY(); draw(); } });
+let chartReady = false;
+function toggleChart() {
+    const w = document.getElementById("chart-wrap");
+    const show = w.style.display === "none";
+    w.style.display = show ? "block" : "none";
+    document.getElementById("chart-btn").classList.toggle("btn-info", show);
+    document.getElementById("chart-btn").classList.toggle("btn-outline-info", !show);
+    if (show && !chartReady) { chartReady = true; if (IS_MULTI) onSource(); else { syncY(); draw(); } }
+    else if (show) { draw(); }
+}
+document.addEventListener("themechange", () => { if (document.getElementById("chart-wrap").style.display !== "none") setTimeout(draw, 50); });
+
+// ── Side pane ──
+let spOpen = false;
+function toggleSidePane() {
+    const p = document.getElementById("side-pane");
+    spOpen = !spOpen;
+    p.style.display = spOpen ? "block" : "none";
+    document.getElementById("sp-btn").classList.toggle("btn-secondary", spOpen);
+    document.getElementById("sp-btn").classList.toggle("btn-outline-secondary", !spOpen);
+    if (spOpen) loadSidePaneDefault();
+}
+function loadSidePaneDefault() {
+    fetch(`/arcticdb/api/sidepane/metadata/${enc(LIB)}/${enc(SYM)}`)
+        .then(r => { if (r.ok) return r.text(); throw new Error("no metadata"); })
+        .then(html => { const el = document.getElementById("sidepane-content"); el.innerHTML = html; htmx.process(el); })
+        .catch(() => htmx.ajax("GET", "/arcticdb/api/sidepane/libraries", "#sidepane-content"));
+}
 
 {% if is_admin %}
 // ── Admin CRUD on the data table ──
 let acEditing = null;
-function reloadTable() { htmx.ajax("GET", `/arcticdb/api/table/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}?page=1`, "#ac-table"); }
+function reloadTable() { htmx.ajax("GET", `/arcticdb/api/table/${enc(LIB)}/${enc(SYM)}?page=1`, "#ac-table"); }
 function updateSel() {
     const n = document.querySelectorAll(".ac-rowcb:checked").length;
     const sel = document.getElementById("ac-sel");
@@ -274,7 +310,7 @@ function editCell(el, row, col) {
         if (!save || inp.value === orig) { el.textContent = orig; return; }
         const v = inp.value; el.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         const fd = new FormData(); fd.append("row_idx", row); fd.append("col_name", col); fd.append("value", v);
-        fetch(`/arcticdb/api/cell/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`, { method: "PUT", body: fd })
+        fetch(`/arcticdb/api/cell/${enc(LIB)}/${enc(SYM)}`, { method: "PUT", body: fd })
             .then(r => { el.textContent = r.ok ? v : orig; if (!r.ok) showToast("Update failed", "error"); });
     }
     inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); done(true); } if (e.key === "Escape") done(false); });
@@ -286,14 +322,14 @@ function deleteSelectedRows() {
     if (!idx.length) return;
     if (!confirm(`Delete ${idx.length} row(s)? This cannot be undone.`)) return;
     const fd = new FormData(); fd.append("row_indices", JSON.stringify(idx));
-    fetch(`/arcticdb/api/rows/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`, { method: "DELETE", body: fd })
+    fetch(`/arcticdb/api/rows/${enc(LIB)}/${enc(SYM)}`, { method: "DELETE", body: fd })
         .then(r => { if (r.ok) { showToast("Rows deleted"); reloadTable(); } else showToast("Delete failed", "error"); });
 }
 function submitAddRow() {
     const data = {}; let any = false;
     document.querySelectorAll(".add-in").forEach(i => { const v = i.value.trim(); if (v) { data[i.dataset.col] = v; any = true; } });
     if (!any) { showToast("Enter at least one value", "error"); return; }
-    fetch(`/arcticdb/api/addrow/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`,
+    fetch(`/arcticdb/api/addrow/${enc(LIB)}/${enc(SYM)}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
         .then(r => { if (r.ok) { showToast("Row added"); document.querySelectorAll(".add-in").forEach(i => i.value = "");
             reloadTable(); bootstrap.Collapse.getOrCreateInstance(document.getElementById("add-row")).hide(); }

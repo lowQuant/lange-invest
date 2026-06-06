@@ -1,0 +1,48 @@
+<div class="d-flex align-items-center mb-2 gap-2">
+    <a href="#" class="btn btn-sm btn-outline-secondary"
+       hx-get="/arcticdb/api/sidepane/symbols/{{ library }}" hx-target="#sidepane-content" hx-swap="innerHTML" title="Back to symbols">
+        <i class="bi bi-arrow-left"></i>
+    </a>
+    <div style="flex: 1; min-width: 0;">
+        <div class="eyebrow" style="color: var(--ink-4);">Preview</div>
+        <div style="font-family: var(--mono); font-size: 0.75rem; color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            {{ library }} <span style="color: var(--ink-4);">/</span> <span style="color: var(--info);">{{ symbol }}</span>
+        </div>
+    </div>
+    <span class="badge bg-secondary num">{{ "{:,}".format(total_rows) }}</span>
+</div>
+<div class="table-responsive" style="max-height: calc(100vh - 220px); overflow-y: auto; border: 1px solid var(--line-2); border-radius: 4px;">
+    <table class="table table-sm mb-0" style="font-size: 0.6875rem;">
+        <thead>
+            <tr>
+                {% if has_index %}<th class="text-info">{{ df.index.name or 'index' }}</th>{% endif %}
+                {% for col in columns %}<th>{{ col }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for idx, row in df.iterrows() %}
+            <tr>
+                {% if has_index %}<td class="text-nowrap text-info">{{ idx }}</td>{% endif %}
+                {% for col in columns %}<td class="text-nowrap">{{ row[col] if row[col] == row[col] else '' }}</td>{% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if total_pages > 1 %}
+<div class="d-flex justify-content-between align-items-center mt-2">
+    <span class="label-mono">Page {{ page + 1 }} / {{ total_pages }}</span>
+    <div class="btn-group btn-group-sm">
+        {% if page > 0 %}
+        <button class="btn btn-sm btn-outline-secondary"
+                hx-get="/arcticdb/api/sidepane/data/{{ library }}/{{ symbol }}?page={{ page - 1 }}&page_size={{ page_size }}"
+                hx-target="#sidepane-content" hx-swap="innerHTML"><i class="bi bi-chevron-left"></i></button>
+        {% endif %}
+        {% if page < total_pages - 1 %}
+        <button class="btn btn-sm btn-outline-secondary"
+                hx-get="/arcticdb/api/sidepane/data/{{ library }}/{{ symbol }}?page={{ page + 1 }}&page_size={{ page_size }}"
+                hx-target="#sidepane-content" hx-swap="innerHTML"><i class="bi bi-chevron-right"></i></button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

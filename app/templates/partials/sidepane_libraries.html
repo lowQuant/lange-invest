@@ -1,0 +1,13 @@
+<div class="eyebrow mb-2" style="color: var(--ink-4);">Browse · libraries</div>
+<div style="display: flex; flex-direction: column; gap: 1px; background: var(--line-2); border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden;">
+    {% for lib in libraries %}
+    <a href="#" class="sp-row"
+       hx-get="/arcticdb/api/sidepane/symbols/{{ lib }}" hx-target="#sidepane-content" hx-swap="innerHTML"
+       style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.625rem; background: var(--bg-1); color: var(--ink-1); text-decoration: none; font-family: var(--mono); font-size: 0.75rem; transition: background 120ms;">
+        <i class="bi bi-table" style="color: var(--ink-3); font-size: 0.75rem;"></i>
+        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ lib }}</span>
+        <i class="bi bi-chevron-right" style="color: var(--ink-4); font-size: 0.65rem;"></i>
+    </a>
+    {% endfor %}
+</div>
+<style>.sp-row:hover { background: var(--bg-2) !important; }</style>

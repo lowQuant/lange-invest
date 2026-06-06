@@ -296,13 +296,33 @@ async def edit_cell(request: Request, library: str, symbol: str):
         row_idx = int(form["row_idx"])
         col = form["col_name"]
         value = form["value"]
-        df = _ops().read_data(library, symbol)
-        if pd.api.types.is_numeric_dtype(df[col].dtype):
+
+        # Read ONLY the target row (cheap) to learn its dtype + index value.
+        row_df = _ops().read_data(library, symbol, row_range=(row_idx, row_idx + 1))
+        if len(row_df) == 0 or col not in row_df.columns:
+            raise ValueError("row or column out of range")
+        if pd.api.types.is_numeric_dtype(row_df[col].dtype):
             parsed = _parse_value(value)
             if isinstance(parsed, float):
-                value = int(parsed) if pd.api.types.is_integer_dtype(df[col].dtype) else parsed
-        df.at[df.index[row_idx], col] = value
-        _ops().write_data(library, symbol, df)
+                value = int(parsed) if pd.api.types.is_integer_dtype(row_df[col].dtype) else parsed
+        row_df.iloc[0, row_df.columns.get_loc(col)] = value
+
+        # Fast path: a plain DatetimeIndex symbol can be patched in place with
+        # ArcticDB `update` (no full rewrite). Anything else (MultiIndex, integer
+        # index, or an update failure) falls back to a correct full rewrite.
+        fast = isinstance(row_df.index, pd.DatetimeIndex) and not isinstance(row_df.index, pd.MultiIndex)
+        done = False
+        if fast:
+            try:
+                _ops().update_data(library, symbol, row_df)
+                done = True
+            except Exception:  # noqa: BLE001
+                done = False
+        if not done:
+            full = _ops().read_data(library, symbol)
+            full.iat[row_idx, full.columns.get_loc(col)] = value
+            _ops().write_data(library, symbol, full)
+
         return HTMLResponse(str(value), headers=_toast("Cell updated"))
     except Exception as e:  # noqa: BLE001
         return HTMLResponse(str(e), status_code=400, headers=_toast(f"Error: {e}", "error"))
@@ -313,27 +333,48 @@ async def add_row(request: Request, library: str, symbol: str):
     _require_admin(request); ensure_connected()
     try:
         body = await request.json()
-        df = _ops().read_data(library, symbol)
+        desc = _ops().get_description(library, symbol)
+        total = int(desc.get("rows") or 0)
+        cols = desc["columns"]
+        dtypes = desc.get("dtypes", {})
+        index_name = (desc.get("index") or {}).get("name")
+
         new_row = {}
-        for col in df.columns:
+        for col in cols:
             val = body.get(col, "")
             if val == "":
                 new_row[col] = None
-            elif pd.api.types.is_numeric_dtype(df[col]):
+            elif "float" in str(dtypes.get(col, "")) or "int" in str(dtypes.get(col, "")):
                 parsed = _parse_value(val)
                 new_row[col] = parsed if isinstance(parsed, float) else None
             else:
                 new_row[col] = val
-        new_df = pd.DataFrame([new_row], columns=df.columns)
-        if isinstance(df.index, pd.DatetimeIndex):
-            iv = body.get(df.index.name or "index", "")
-            new_df.index = pd.DatetimeIndex([_parse_timestamp(iv) if iv else pd.Timestamp.now()], name=df.index.name)
-        elif df.index.name and df.index.name in body:
-            new_df.index = pd.Index([body[df.index.name]], name=df.index.name)
-        combined = pd.concat([df, new_df])
-        if isinstance(combined.index, pd.DatetimeIndex):
-            combined = combined.sort_index()
-        _ops().write_data(library, symbol, combined)
+        new_df = pd.DataFrame([new_row], columns=cols)
+
+        index_is_dt = "datetime" in str((desc.get("index") or {}).get("dtype", "")).lower()
+        if index_is_dt:
+            iv = body.get(index_name or "index", "")
+            new_df.index = pd.DatetimeIndex([_parse_timestamp(iv) if iv else pd.Timestamp.now()], name=index_name)
+        elif index_name and index_name in body:
+            new_df.index = pd.Index([body[index_name]], name=index_name)
+
+        # Fast path: appending a NEWER timestamp to a DatetimeIndex symbol uses
+        # ArcticDB `append` (no full rewrite). Otherwise rewrite + sort.
+        appended = False
+        if index_is_dt and total > 0:
+            try:
+                last = _ops().read_data(library, symbol, row_range=(total - 1, total))
+                if len(last) and new_df.index[0] > last.index[-1]:
+                    _ops().append_data(library, symbol, new_df)
+                    appended = True
+            except Exception:  # noqa: BLE001
+                appended = False
+        if not appended:
+            df = _ops().read_data(library, symbol)
+            combined = pd.concat([df, new_df])
+            if isinstance(combined.index, pd.DatetimeIndex):
+                combined = combined.sort_index()
+            _ops().write_data(library, symbol, combined)
         return HTMLResponse("OK")
     except Exception as e:  # noqa: BLE001
         return HTMLResponse(str(e), status_code=400)
@@ -351,6 +392,92 @@ async def delete_rows(request: Request, library: str, symbol: str):
         return HTMLResponse("", headers=_toast("Rows deleted", refreshTable="true"))
     except Exception as e:  # noqa: BLE001
         return HTMLResponse("", status_code=400, headers=_toast(f"Error: {e}", "error"))
+
+
+# ── Side pane (read-only): universe metadata + library/symbol browser ─────────
+
+def _read_any(request: Request, library: str, symbol: str, **kw):
+    """Read a library that may be outside the database-tab set but is still
+    publicly allowlisted (e.g. `universe`). Admins read anything."""
+    if _is_admin(request):
+        return _ops().read_data(library, symbol, **kw)
+    return public_access.read_data(library, symbol, **kw)
+
+
+def _list_any_symbols(request: Request, library: str):
+    if _is_admin(request):
+        return _ops().list_symbols(library)
+    return public_access.list_symbols(library)
+
+
+@router.get("/api/sidepane/metadata/{library}/{symbol:path}", response_class=HTMLResponse)
+async def sidepane_metadata(request: Request, library: str, symbol: str):
+    if not _allowed(request, library):
+        raise HTTPException(status_code=404)
+    ensure_connected()
+    try:
+        # Convention: library `futures` → symbol `Futures` in the `universe`
+        # library; match a row by ibkr_symbol / symbol / ticker / name.
+        try:
+            usyms = _list_any_symbols(request, "universe")
+        except Exception:
+            return HTMLResponse("", status_code=404)
+        target = library.capitalize()
+        match = target if target in usyms else next((u for u in usyms if u.lower() == library.lower()), None)
+        if not match:
+            return HTMLResponse("", status_code=404)
+        df = _read_any(request, "universe", match)
+        row = None
+        for col in ("ibkr_symbol", "symbol", "ticker", "name"):
+            if col in df.columns:
+                m = df[df[col].astype(str).str.upper() == symbol.upper()]
+                if len(m) > 0:
+                    row = m.iloc[0]
+                    break
+        if row is None:
+            return HTMLResponse("", status_code=404)
+        metadata = {k: v for k, v in row.to_dict().items() if pd.notna(v)}
+        return render(request, "partials/sidepane_metadata.html",
+                      library=library, symbol=symbol, universe_symbol=match, metadata=metadata)
+    except Exception:  # noqa: BLE001
+        return HTMLResponse("", status_code=404)
+
+
+@router.get("/api/sidepane/libraries", response_class=HTMLResponse)
+async def sidepane_libraries(request: Request):
+    ensure_connected()
+    libs = sorted(item["name"] for item in _list_libraries(request))
+    return render(request, "partials/sidepane_libraries.html", libraries=libs)
+
+
+@router.get("/api/sidepane/symbols/{library}", response_class=HTMLResponse)
+async def sidepane_symbols(request: Request, library: str):
+    if not _allowed(request, library):
+        raise HTTPException(status_code=404)
+    ensure_connected()
+    return render(request, "partials/sidepane_symbols.html",
+                  library=library, symbols=sorted(_symbols(request, library)))
+
+
+@router.get("/api/sidepane/data/{library}/{symbol:path}", response_class=HTMLResponse)
+async def sidepane_data(request: Request, library: str, symbol: str, page: int = 0, page_size: int = 25):
+    if not _allowed(request, library):
+        raise HTTPException(status_code=404)
+    ensure_connected()
+    try:
+        desc = _describe(request, library, symbol)
+        total = int(desc.get("rows") or 0)
+        pages = max(1, (total + page_size - 1) // page_size)
+        page = max(0, min(page, pages - 1))
+        df = _read(request, library, symbol, row_range=(page * page_size, (page + 1) * page_size))
+    except public_access.AccessDenied:
+        raise HTTPException(status_code=404)
+    except Exception as e:  # noqa: BLE001
+        return HTMLResponse(f'<div class="alert alert-danger mb-0">{e}</div>')
+    has_index = isinstance(df.index, pd.MultiIndex) or df.index.name is not None or not isinstance(df.index, pd.RangeIndex)
+    return render(request, "partials/sidepane_datatable.html", library=library, symbol=symbol,
+                  df=df, columns=[str(c) for c in df.columns], page=page, page_size=page_size,
+                  total_rows=total, total_pages=pages, has_index=has_index)
 
 
 # ── Browse pages (greedy routes LAST so /api/* wins) ──────────────────────────

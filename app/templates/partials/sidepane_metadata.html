@@ -1,0 +1,32 @@
+<div class="d-flex align-items-center justify-content-between mb-2 gap-2">
+    <div style="flex: 1; min-width: 0;">
+        <div class="eyebrow" style="color: var(--ink-4);">Universe · universe/{{ universe_symbol }}</div>
+        <div style="font-family: var(--mono); font-size: 0.8125rem; color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <i class="bi bi-info-circle" style="color: var(--ink-3);"></i> {{ symbol }}
+        </div>
+    </div>
+    <a href="#" class="btn btn-sm btn-outline-secondary"
+       hx-get="/arcticdb/api/sidepane/libraries" hx-target="#sidepane-content" hx-swap="innerHTML" title="Browse ArcticDB">
+        <i class="bi bi-hdd-stack"></i>
+    </a>
+</div>
+<div style="border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden;">
+    <table class="table table-sm mb-0" style="font-size: 0.75rem; width: 100%;">
+        <tbody>
+            {% for key, value in metadata.items() %}
+            <tr>
+                <td class="label-mono" style="padding: 0.35rem 0.5rem; border-color: var(--line-1) !important; vertical-align: top; white-space: nowrap;">{{ key }}</td>
+                <td style="padding: 0.35rem 0.5rem; border-color: var(--line-1) !important; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; white-space: normal; line-height: 1.4;">
+                    {% if value is number %}
+                        <span class="num">{% if value == value | int and value | abs < 1000000 %}{{ value | int }}{% else %}{{ "%.4f" % value if value | abs < 1 else "%.2f" % value }}{% endif %}</span>
+                    {% elif value == true or value == false %}
+                        <span class="badge {{ 'bg-success' if value else 'bg-secondary' }}">{{ value }}</span>
+                    {% else %}
+                        {{ value }}
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

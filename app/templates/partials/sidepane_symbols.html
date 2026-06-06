@@ -1,0 +1,25 @@
+<div class="d-flex align-items-center mb-2 gap-2">
+    <a href="#" class="btn btn-sm btn-outline-secondary"
+       hx-get="/arcticdb/api/sidepane/libraries" hx-target="#sidepane-content" hx-swap="innerHTML" title="Back to libraries">
+        <i class="bi bi-arrow-left"></i>
+    </a>
+    <div style="flex: 1; min-width: 0;">
+        <div class="eyebrow" style="color: var(--ink-4);">Library</div>
+        <div style="font-family: var(--mono); font-size: 0.8125rem; color: var(--ink-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            <i class="bi bi-table" style="color: var(--ink-3);"></i> {{ library }}
+        </div>
+    </div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 1px; background: var(--line-2); border: 1px solid var(--line-2); border-radius: 4px; overflow: hidden;">
+    {% for sym in symbols %}
+    <a href="#" class="sp-row"
+       hx-get="/arcticdb/api/sidepane/data/{{ library }}/{{ sym }}?page=0&page_size=25" hx-target="#sidepane-content" hx-swap="innerHTML"
+       style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.625rem; background: var(--bg-1); color: var(--ink-1); text-decoration: none; font-family: var(--mono); font-size: 0.75rem; transition: background 120ms;">
+        <i class="bi bi-graph-up" style="color: var(--ink-3); font-size: 0.75rem;"></i>
+        <span style="flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ sym }}</span>
+        <i class="bi bi-chevron-right" style="color: var(--ink-4); font-size: 0.65rem;"></i>
+    </a>
+    {% endfor %}
+</div>
+<div class="mt-2 eyebrow" style="color: var(--ink-4);">{{ symbols|length }} symbol{{ 's' if symbols|length != 1 }}</div>
+<style>.sp-row:hover { background: var(--bg-2) !important; }</style>

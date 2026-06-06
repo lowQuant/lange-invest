@@ -52,6 +52,21 @@ async def healthz():
     return "ok"
 
 
+# ── Admin: mount the arcticdb-viewer wholesale, behind an admin-only guard ──
+from fastapi.responses import RedirectResponse  # noqa: E402
+
+from app.admin_mount import build_admin_app  # noqa: E402
+
+
+@app.get("/admin")
+async def admin_root_redirect():
+    # Starlette Mount matches "/admin/..."; normalise the bare path.
+    return RedirectResponse("/admin/", status_code=307)
+
+
+app.mount("/admin", build_admin_app())
+
+
 # ── Routers ──
 # Auth + gated fragments register BEFORE the public catch-all `/{ac_slug}`,
 # which is greedy and must stay LAST.

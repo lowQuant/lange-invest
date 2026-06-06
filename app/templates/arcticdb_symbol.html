@@ -25,6 +25,35 @@
     {% endif %}
 </div>
 
+{% if is_admin %}
+<div class="d-flex gap-1 mb-3">
+    <button class="btn btn-sm btn-outline-success" data-bs-toggle="collapse" data-bs-target="#add-row"><i class="bi bi-plus-lg"></i> Add row</button>
+    <button class="btn btn-sm btn-outline-danger"
+            hx-delete="/arcticdb/api/symbol/{{ library }}/{{ symbol }}"
+            hx-confirm="Delete symbol '{{ symbol }}'? This cannot be undone."
+            hx-on::after-request="if(event.detail.successful) window.location.href='/arcticdb/{{ library }}'">
+        <i class="bi bi-trash"></i> Delete symbol</button>
+</div>
+<div class="collapse mb-3" id="add-row">
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-plus-circle"></i> Insert row</span></div>
+        <div class="qt-panel-body">
+            <div class="row g-2" id="add-row-fields">
+                {% if desc and desc.index and desc.index.name %}
+                <div class="col-auto"><label class="form-label">{{ desc.index.name }} <span class="badge bg-info">idx</span></label>
+                    <input class="form-control form-control-sm add-in" data-col="{{ desc.index.name }}" placeholder="2026-01-01" style="font-family:var(--mono);"></div>
+                {% endif %}
+                {% for c in desc.columns %}
+                <div class="col-auto"><label class="form-label">{{ c }}</label>
+                    <input class="form-control form-control-sm add-in" data-col="{{ c }}" placeholder="{{ c }}" style="font-family:var(--mono);"></div>
+                {% endfor %}
+            </div>
+            <button class="btn btn-sm btn-success mt-2" onclick="submitAddRow()"><i class="bi bi-check-lg"></i> Insert</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {# ── Chart panel ── #}
 <div class="qt-panel mb-3">
     <div class="qt-panel-head" style="flex-direction:column; align-items:stretch; padding:0;">
@@ -137,7 +166,7 @@
 <div class="qt-panel">
     <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-table"></i> Data</span></div>
     <div class="qt-panel-body dense" id="ac-table"
-         hx-get="/arcticdb/api/table/{{ library }}/{{ symbol }}?page=1" hx-trigger="load" hx-swap="innerHTML">
+         hx-get="/arcticdb/api/table/{{ library }}/{{ symbol }}?page=1" hx-trigger="load, refreshTable from:body" hx-swap="innerHTML">
         <div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>
     </div>
 </div>
@@ -225,6 +254,52 @@ function draw() {
 document.addEventListener("themechange", () => setTimeout(draw, 50));
 // Single initial draw: onSource()/onCMode() already call draw() for multiindex.
 document.addEventListener("DOMContentLoaded", () => { if (IS_MULTI) { onSource(); } else { syncY(); draw(); } });
+
+{% if is_admin %}
+// ── Admin CRUD on the data table ──
+let acEditing = null;
+function reloadTable() { htmx.ajax("GET", `/arcticdb/api/table/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}?page=1`, "#ac-table"); }
+function updateSel() {
+    const n = document.querySelectorAll(".ac-rowcb:checked").length;
+    const sel = document.getElementById("ac-sel");
+    if (sel) { sel.style.display = n ? "inline" : "none"; document.getElementById("ac-sel-n").textContent = n; }
+}
+function editCell(el, row, col) {
+    if (acEditing) return;
+    const orig = el.textContent.trim(); acEditing = el; let fin = false;
+    const inp = document.createElement("input");
+    inp.className = "form-control form-control-sm"; inp.value = orig; inp.style.minWidth = "80px";
+    function done(save) {
+        if (fin) return; fin = true; acEditing = null;
+        if (!save || inp.value === orig) { el.textContent = orig; return; }
+        const v = inp.value; el.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        const fd = new FormData(); fd.append("row_idx", row); fd.append("col_name", col); fd.append("value", v);
+        fetch(`/arcticdb/api/cell/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`, { method: "PUT", body: fd })
+            .then(r => { el.textContent = r.ok ? v : orig; if (!r.ok) showToast("Update failed", "error"); });
+    }
+    inp.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); done(true); } if (e.key === "Escape") done(false); });
+    inp.addEventListener("blur", () => done(true));
+    el.textContent = ""; el.appendChild(inp); inp.focus(); inp.select();
+}
+function deleteSelectedRows() {
+    const idx = Array.from(document.querySelectorAll(".ac-rowcb:checked")).map(cb => parseInt(cb.dataset.rowIdx));
+    if (!idx.length) return;
+    if (!confirm(`Delete ${idx.length} row(s)? This cannot be undone.`)) return;
+    const fd = new FormData(); fd.append("row_indices", JSON.stringify(idx));
+    fetch(`/arcticdb/api/rows/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`, { method: "DELETE", body: fd })
+        .then(r => { if (r.ok) { showToast("Rows deleted"); reloadTable(); } else showToast("Delete failed", "error"); });
+}
+function submitAddRow() {
+    const data = {}; let any = false;
+    document.querySelectorAll(".add-in").forEach(i => { const v = i.value.trim(); if (v) { data[i.dataset.col] = v; any = true; } });
+    if (!any) { showToast("Enter at least one value", "error"); return; }
+    fetch(`/arcticdb/api/addrow/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+        .then(r => { if (r.ok) { showToast("Row added"); document.querySelectorAll(".add-in").forEach(i => i.value = "");
+            reloadTable(); bootstrap.Collapse.getOrCreateInstance(document.getElementById("add-row")).hide(); }
+            else r.text().then(t => showToast("Error: " + t, "error")); });
+}
+{% endif %}
 </script>
 {% endif %}
 {% endblock %}

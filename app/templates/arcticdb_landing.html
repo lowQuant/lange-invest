@@ -7,10 +7,15 @@
     <div>
         <span class="eyebrow"><i class="bi bi-hdd-stack"></i> ArcticDB</span>
         <h1>Data libraries</h1>
-        <p class="lead">Browse the raw data behind the strategies — read-only.
-            {% if is_admin %}<span class="badge bg-primary">admin · full instance</span>{% endif %}
+        <p class="lead">Browse the raw data behind the strategies.
+            {% if is_admin %}<span class="badge bg-primary">admin · full instance · read/write</span>{% else %}<span class="text-muted">Read-only.</span>{% endif %}
         </p>
     </div>
+    {% if is_admin %}
+    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#new-lib">
+        <i class="bi bi-plus-lg"></i> New library
+    </button>
+    {% endif %}
 </div>
 
 {% if not connected %}
@@ -18,17 +23,21 @@
    (<code>LANGE_DB_URI</code> or S3 env vars) these libraries become browsable.</div>
 {% endif %}
 
-<div class="qt-grid cols-3">
-    {% for item in libs %}
-    <a class="qt-tile" href="/arcticdb/{{ item.name }}">
-        <span class="qt-tile-eyebrow eyebrow"><i class="bi bi-table"></i> {{ item.name }}</span>
-        <span class="qt-tile-title">{{ item.label }}</span>
-        {% if item.description %}<span class="qt-tile-blurb">{{ item.description }}</span>{% endif %}
-        <span class="qt-tile-meta">
-            {% if item.count is not none %}<span class="badge bg-secondary">{{ item.count }} symbols</span>{% endif %}
-            {% if item.chart %}<span class="badge bg-primary">charting</span>{% endif %}
-        </span>
-    </a>
-    {% endfor %}
+{% if is_admin %}
+<div class="collapse mb-3" id="new-lib">
+    <div class="qt-panel"><div class="qt-panel-body">
+        <form hx-post="/arcticdb/api/library" hx-target="#library-list" hx-swap="innerHTML"
+              hx-on::after-request="if(event.detail.successful) this.reset()">
+            <div class="input-group">
+                <input name="name" class="form-control" placeholder="library_name" required style="font-family: var(--mono);">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Create</button>
+            </div>
+        </form>
+    </div></div>
+</div>
+{% endif %}
+
+<div id="library-list">
+    {% include "partials/arctic_library_list.html" %}
 </div>
 {% endblock %}

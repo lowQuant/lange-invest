@@ -1,14 +1,42 @@
-{# Read-only paginated data table fragment. #}
+{# Paginated data table. Read-only for public; editable cells + row delete for admin (can_edit). #}
 <div class="d-flex justify-content-between align-items-center mb-2">
     <span class="label-mono">{{ '{:,}'.format(total) }} rows</span>
-    {% if pages > 1 %}<span class="label-mono">page {{ page }} / {{ pages }}</span>{% endif %}
+    <div class="d-flex align-items-center gap-2">
+        {% if can_edit %}
+        <span id="ac-sel" class="label-mono" style="display:none;">
+            <span id="ac-sel-n">0</span> selected
+            <button class="btn btn-sm btn-danger ms-1" onclick="deleteSelectedRows()"><i class="bi bi-trash"></i> Delete</button>
+        </span>
+        {% endif %}
+        {% if pages > 1 %}<span class="label-mono">page {{ page }} / {{ pages }}</span>{% endif %}
+    </div>
 </div>
 <div class="table-container">
     <table class="table table-sm">
-        <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <thead><tr>
+            {% if can_edit %}
+            <th style="width:28px;"><input type="checkbox" class="form-check-input" onchange="document.querySelectorAll('.ac-rowcb').forEach(cb=>{cb.checked=this.checked;});updateSel();"></th>
+            <th class="col-num" style="width:48px;">#</th>
+            {% endif %}
+            {% if has_index %}<th class="text-info">{{ index_label }}</th>{% endif %}
+            {% for c in data_columns %}<th>{{ c }}</th>{% endfor %}
+        </tr></thead>
         <tbody>
             {% for row in rows %}
-            <tr>{% for cell in row %}<td{% if not loop.first and cell is number %} class="col-num"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
+            <tr>
+                {% if can_edit %}
+                <td><input type="checkbox" class="form-check-input ac-rowcb" data-row-idx="{{ row.n }}" onchange="updateSel()"></td>
+                <td class="col-num text-muted">{{ row.n }}</td>
+                {% endif %}
+                {% if has_index %}<td class="text-info">{{ row.idx }}</td>{% endif %}
+                {% for cell in row.cells %}
+                {% if can_edit %}
+                <td ondblclick="editCell(this, {{ row.n }}, {{ data_columns[loop.index0] | tojson }})">{{ cell }}</td>
+                {% else %}
+                <td{% if cell is number %} class="col-num"{% endif %}>{{ cell }}</td>
+                {% endif %}
+                {% endfor %}
+            </tr>
             {% endfor %}
         </tbody>
     </table>

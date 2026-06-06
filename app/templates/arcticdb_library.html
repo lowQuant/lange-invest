@@ -9,22 +9,112 @@
         <span class="eyebrow"><i class="bi bi-table"></i> Library</span>
         <h1 style="font-family:var(--mono);">{{ library }}</h1>
     </div>
-    {% if symbols %}<span class="label-mono">{{ symbols | length }} symbols</span>{% endif %}
+    {% if is_admin %}
+    <div class="d-flex gap-1">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#upload-form"><i class="bi bi-upload"></i> Upload CSV</button>
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="collapse" data-bs-target="#new-sym"><i class="bi bi-plus-lg"></i> New symbol</button>
+    </div>
+    {% endif %}
 </div>
 
 {% if error %}
     <div class="alert alert-info">{{ error }}</div>
-{% elif symbols %}
-    <div class="qt-grid cols-3">
-        {% for sym in symbols %}
-        <a class="qt-tile" href="/arcticdb/{{ library }}/{{ sym }}" style="padding:0.7rem 0.85rem;">
-            <span class="qt-tile-title" style="font-family:var(--mono); font-size:0.95rem;">
-                <i class="bi bi-graph-up" style="color:var(--accent);"></i> {{ sym }}
-            </span>
-        </a>
-        {% endfor %}
-    </div>
 {% else %}
-    <div class="alert alert-info">No symbols in this library.</div>
+
+<div class="mb-3" style="position: relative;">
+    <i class="bi bi-search" style="position:absolute; left:.75rem; top:50%; transform:translateY(-50%); color:var(--ink-3);"></i>
+    <input type="search" class="form-control" name="q" placeholder="Search symbols…"
+           style="padding-left:2.25rem; font-family:var(--mono); font-size:.8125rem;"
+           hx-get="/arcticdb/{{ library }}" hx-target="#symbol-list" hx-swap="innerHTML"
+           hx-trigger="keyup changed delay:300ms" hx-include="this">
+</div>
+
+{% if is_admin %}
+<div class="collapse mb-3" id="new-sym">
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-plus-circle"></i> New symbol</span></div>
+        <div class="qt-panel-body">
+            <div class="mb-2"><label class="form-label">Symbol name</label>
+                <input id="ns-name" class="form-control form-control-sm" placeholder="my_symbol" style="font-family:var(--mono);"></div>
+            <div class="mb-2"><label class="form-label">Index</label>
+                <div class="d-flex gap-2">
+                    <select id="ns-idx-type" class="form-select form-select-sm" style="width:160px;">
+                        <option value="datetime">DateTime index</option>
+                        <option value="integer">Integer index</option>
+                        <option value="none">No named index</option>
+                    </select>
+                    <input id="ns-idx-name" class="form-control form-control-sm" placeholder="index name (e.g. date)" style="flex:1;">
+                </div></div>
+            <div class="mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label mb-0">Columns</label>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="addCol()"><i class="bi bi-plus-lg"></i> Add column</button>
+                </div>
+                <div id="ns-cols"></div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="createSymbol()"><i class="bi bi-check-lg"></i> Create symbol</button>
+        </div>
+    </div>
+</div>
+
+<div class="collapse mb-3" id="upload-form">
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-cloud-upload"></i> Upload CSV</span></div>
+        <div class="qt-panel-body">
+            <form hx-post="/arcticdb/api/upload/{{ library }}" hx-target="#symbol-list" hx-swap="innerHTML"
+                  hx-encoding="multipart/form-data" hx-on::after-request="if(event.detail.successful) this.reset()">
+                <div class="mb-2"><label class="form-label">Symbol name</label>
+                    <input name="symbol" class="form-control form-control-sm" placeholder="my_symbol" required style="font-family:var(--mono);"></div>
+                <div class="mb-2"><label class="form-label">CSV file</label>
+                    <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required></div>
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-upload"></i> Upload &amp; create</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div id="symbol-list">
+    {% include "partials/arctic_symbol_list.html" %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if is_admin and not error %}
+<script>
+const LIB = {{ library | tojson }};
+function addCol() {
+    document.getElementById("ns-cols").insertAdjacentHTML("beforeend", `
+        <div class="d-flex gap-2 align-items-center mb-1 col-row">
+            <input class="form-control form-control-sm col-name" placeholder="column_name" style="width:200px; font-family:var(--mono);">
+            <select class="form-select form-select-sm col-type" style="width:150px;">
+                <option value="float">Number (float)</option><option value="int">Number (int)</option>
+                <option value="str">Text</option><option value="bool">Boolean</option>
+            </select>
+            <button class="btn btn-sm btn-outline-danger" onclick="this.closest('.col-row').remove()"><i class="bi bi-x-lg"></i></button>
+        </div>`);
+}
+addCol(); addCol();
+function createSymbol() {
+    const name = document.getElementById("ns-name").value.trim();
+    if (!name) { showToast("Symbol name is required", "error"); return; }
+    const cols = [];
+    document.querySelectorAll(".col-row").forEach(r => {
+        const n = r.querySelector(".col-name").value.trim();
+        if (n) cols.push({ name: n, type: r.querySelector(".col-type").value });
+    });
+    if (!cols.length) { showToast("Add at least one column", "error"); return; }
+    fetch(`/arcticdb/api/symbol/${LIB}/create`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: name, index_type: document.getElementById("ns-idx-type").value,
+            index_name: document.getElementById("ns-idx-name").value.trim() || null, columns: cols }),
+    }).then(r => {
+        if (r.ok) { showToast(`Symbol '${name}' created`); htmx.ajax("GET", `/arcticdb/${LIB}`, "#symbol-list");
+            bootstrap.Collapse.getOrCreateInstance(document.getElementById("new-sym")).hide(); }
+        else r.text().then(t => showToast("Error: " + t, "error"));
+    });
+}
+</script>
 {% endif %}
 {% endblock %}

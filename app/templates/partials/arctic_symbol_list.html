@@ -1,0 +1,20 @@
+{# Symbol list (refreshable). Admin gets a delete button per symbol. #}
+{% if symbols %}
+<div class="qt-grid cols-3">
+    {% for sym in symbols %}
+    <div class="qt-tile" style="position: relative; flex-direction: row; align-items: center; justify-content: space-between; padding: 0.7rem 0.85rem;">
+        <a href="/arcticdb/{{ library }}/{{ sym }}" class="qt-tile-title" style="font-family: var(--mono); font-size: 0.95rem; text-decoration: none;">
+            <i class="bi bi-graph-up" style="color: var(--accent);"></i> {{ sym }}
+        </a>
+        {% if is_admin %}
+        <button class="btn btn-sm btn-outline-danger"
+                hx-delete="/arcticdb/api/symbol/{{ library }}/{{ sym }}" hx-target="#symbol-list" hx-swap="innerHTML"
+                hx-confirm="Delete symbol '{{ sym }}'? This cannot be undone."
+                onclick="event.stopPropagation();" title="Delete symbol"><i class="bi bi-trash"></i></button>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info mb-0">No symbols in this library.</div>
+{% endif %}

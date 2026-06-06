@@ -70,8 +70,9 @@ app.mount("/admin", build_admin_app())
 # ── Routers ──
 # Auth + gated fragments register BEFORE the public catch-all `/{ac_slug}`,
 # which is greedy and must stay LAST.
-from app.routes import auth_routes, gated, public  # noqa: E402
+from app.routes import auth_routes, gated, mcp, public  # noqa: E402
 
 app.include_router(auth_routes.router)
 app.include_router(gated.router)
+app.include_router(mcp.router)
 app.include_router(public.router)

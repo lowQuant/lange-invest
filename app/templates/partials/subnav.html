@@ -1,0 +1,9 @@
+{# Data-driven variant sub-nav for an asset class.
+   Expects: asset_class (with .variants), active_variant (slug or None). #}
+<div class="qt-subnav">
+    <a class="qt-subnav-link {% if not active_variant %}active{% endif %}" href="/{{ asset_class.slug }}">Overview</a>
+    {% for v in asset_class.variants %}
+    <a class="qt-subnav-link {% if active_variant == v.slug %}active{% endif %}"
+       href="/{{ asset_class.slug }}/{{ v.slug }}">{{ v.name }}</a>
+    {% endfor %}
+</div>

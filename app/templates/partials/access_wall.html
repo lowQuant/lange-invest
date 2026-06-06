@@ -1,0 +1,11 @@
+{# Access-wall card — shown in place of a gated component when the viewer is
+   not authenticated/entitled. The wall lives in the page, not the route. #}
+<div class="access-wall">
+    <i class="bi bi-shield-lock"></i>
+    <h5>{{ wall_title or 'Members only' }}</h5>
+    <p>{{ wall_body or 'Live signals and the real portfolio are available to members. Sign in to view, or request access.' }}</p>
+    <div class="d-flex gap-2 justify-content-center">
+        <a href="/login?next={{ request.url.path | urlencode }}" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> Sign in</a>
+        <a href="/request-access" class="btn btn-outline-secondary btn-sm">Request access</a>
+    </div>
+</div>

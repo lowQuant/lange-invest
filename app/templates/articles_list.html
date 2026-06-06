@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Articles — {{ site.name }}{% endblock %}
+{% block meta_description %}Research notes and strategy write-ups from {{ site.name }}.{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow">Research</span>
+        <h1>Articles</h1>
+    </div>
+</div>
+
+{% if articles %}
+<div class="qt-grid cols-2">
+    {% for a in articles %}
+    <a class="qt-tile" href="/articles/{{ a.slug }}">
+        <span class="eyebrow">{{ a.date_display }}{% for t in a.tags %} · {{ t }}{% endfor %}</span>
+        <span class="qt-tile-title">{{ a.title }}</span>
+        <span class="qt-tile-blurb">{{ a.summary }}</span>
+    </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">No articles published yet. Check back soon.</div>
+{% endif %}
+{% endblock %}

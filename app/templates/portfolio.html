@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Portfolio — {{ site.name }}{% endblock %}
+{% block meta_description %}Model portfolio allocations and combined backtest. The real book is members-only.{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi bi-pie-chart"></i> Portfolio</span>
+        <h1>Model portfolio</h1>
+        <p class="lead">The transparent model allocation and combined backtest. Signed-in members
+           with entitlement see the <strong>real</strong> book from subscribed IBKR reports.</p>
+    </div>
+</div>
+
+{% if model and model.stats %}
+<div class="mb-3">{% with stats = model.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
+{% endif %}
+
+<div class="qt-grid" style="grid-template-columns: 2fr 1fr;">
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Combined backtest</span></div>
+        <div class="qt-panel-body">
+            {% if model and model.chart %}
+                {% with chart_id = 'pf-chart', chart = model.chart, subplots = model.subplots %}
+                    {% include "partials/chart_panel.html" %}
+                {% endwith %}
+            {% else %}
+                <div class="alert alert-info mb-0">Model portfolio snapshot not published yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-sliders"></i> Allocations</span></div>
+        <div class="qt-panel-body">
+            {% if model and model.allocations %}
+                {% for a in model.allocations %}
+                <div class="alloc-row">
+                    <span class="alloc-name">{{ a.name }}</span>
+                    <span class="alloc-weight">{{ '%.0f' | format(a.weight * 100) }}%</span>
+                    <div class="alloc-bar"><span style="width: {{ a.weight * 100 }}%;"></span></div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted mb-0">Allocations not published.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{# ── Real portfolio — gated component (owner/admin entitlement) ── #}
+<div class="qt-panel mt-3">
+    <div class="qt-panel-head">
+        <span class="qt-panel-head-title"><i class="bi bi-safe2"></i> Real portfolio</span>
+        <span class="badge bg-secondary">members</span>
+    </div>
+    <div class="qt-panel-body"
+         hx-get="/gated/portfolio/real"
+         hx-trigger="load"
+         hx-swap="innerHTML">
+        {% with wall_title = 'Real portfolio is members-only',
+                wall_body = 'Positions, allocation and P&L from the live IBKR account are restricted to entitled members.' %}
+            {% include "partials/access_wall.html" %}
+        {% endwith %}
+    </div>
+</div>
+{% endblock %}

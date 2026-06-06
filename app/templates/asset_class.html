@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ asset_class.name }} — {{ site.name }}{% endblock %}
+{% block meta_description %}{{ asset_class.blurb }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi {{ asset_class.icon }}"></i> Asset class</span>
+        <h1>{{ asset_class.name }}</h1>
+        <p class="lead">{{ asset_class.blurb }}</p>
+    </div>
+</div>
+
+{% include "partials/subnav.html" %}
+
+<div class="qt-grid cols-2">
+    {% for v in asset_class.variants %}
+    <a class="qt-tile" href="/{{ asset_class.slug }}/{{ v.slug }}">
+        <span class="eyebrow">Strategy</span>
+        <span class="qt-tile-title">{{ v.name }}</span>
+        <span class="qt-tile-blurb">{{ v.blurb }}</span>
+        <span class="qt-tile-meta"><span class="text-muted" style="font-size:.75rem;">View charts &amp; signals <i class="bi bi-arrow-right"></i></span></span>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}

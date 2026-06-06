@@ -1,0 +1,11 @@
+{# Stat tiles. Expects `stats`: list of {label, value, dir?(up|down)}. #}
+{% if stats %}
+<div class="stat-grid">
+    {% for s in stats %}
+    <div class="stat-tile">
+        <span class="stat-label">{{ s.label }}</span>
+        <span class="stat-value {{ s.dir or '' }}">{{ s.value }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}

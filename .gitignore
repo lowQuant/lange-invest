@@ -1,0 +1,24 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Sensitive caches — real-account / IBKR data is git-ignored if cached
+data/private/
+data/snapshots/**/*.json
+!data/snapshots/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.claude/

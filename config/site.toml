@@ -1,0 +1,106 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# lange-invest.com — site configuration
+#
+# This file is the single source of truth for:
+#   • the public-readable library allowlist (security boundary)
+#   • the asset-class / strategy-variant taxonomy (data-driven sub-nav)
+#
+# It is intentionally declarative and contains NO secrets. Secrets (S3, IBKR
+# Flex token, MCP tokens, session key) live in environment variables only.
+# ─────────────────────────────────────────────────────────────────────────────
+
+[site]
+name = "lange-invest"
+tagline = "Systematic strategies, transparent signals."
+domain = "lange-invest.com"
+
+# ── Security: public-readable library allowlist ──────────────────────────────
+# public_access.py refuses to list, read, describe, or even *enumerate* any
+# ArcticDB library not named here. IBKR account / real-portfolio libraries must
+# NEVER appear in this list — they are reachable only via /admin and the MCP
+# admin scope.
+[access]
+# Libraries whose data may be exposed through the public/gated read path.
+public_libraries = [
+    "equities_signals",
+    "equities_stats",
+    "futures_signals",
+    "futures_stats",
+    "universe",
+    "model_portfolio",
+]
+
+# Libraries that are explicitly protected. Even with an admin MCP token, the
+# server refuses destructive ops against these unless an override env flag is
+# set. (Belt-and-suspenders alongside the allowlist.)
+protected_libraries = [
+    "ibkr_account",
+    "ibkr_flex",
+    "real_portfolio",
+]
+
+# ── Asset-class & strategy taxonomy (data-driven sub-nav) ────────────────────
+# Each asset class renders a landing page; its `variants` become the sub-nav.
+# Adding a variant here is all that's needed to surface a new strategy page —
+# nothing is hardcoded in templates or routes.
+
+[[asset_class]]
+slug = "equities"
+name = "Equities"
+icon = "bi-bar-chart-line"
+blurb = "US equity strategies — mean reversion, momentum, and structural tilts."
+
+  [[asset_class.variant]]
+  slug = "mean-reversion"
+  name = "Mean Reversion"
+  blurb = "Short-horizon counter-trend entries on oversold liquid names."
+  signals_symbol = "mean_reversion"
+  stats_symbol = "mean_reversion"
+
+  [[asset_class.variant]]
+  slug = "short"
+  name = "Short"
+  blurb = "Systematic short book targeting deteriorating fundamentals and trend."
+  signals_symbol = "short"
+  stats_symbol = "short"
+
+  [[asset_class.variant]]
+  slug = "long"
+  name = "Long"
+  blurb = "Long book of quality names with positive trend and momentum."
+  signals_symbol = "long"
+  stats_symbol = "long"
+
+  [[asset_class.variant]]
+  slug = "base"
+  name = "Base"
+  blurb = "The combined base allocation blending the sub-strategies."
+  signals_symbol = "base"
+  stats_symbol = "base"
+
+[[asset_class]]
+slug = "futures"
+name = "Futures"
+icon = "bi-graph-up-arrow"
+blurb = "Continuously-rolled futures programs across the liquid global complex."
+
+  [[asset_class.variant]]
+  slug = "trend"
+  name = "Trend"
+  blurb = "Classic time-series momentum across the continuous-roll series."
+  signals_symbol = "trend"
+  stats_symbol = "trend"
+
+  [[asset_class.variant]]
+  slug = "carry"
+  name = "Carry"
+  blurb = "Cross-sectional carry harvested from the term structure."
+  signals_symbol = "carry"
+  stats_symbol = "carry"
+
+  [[asset_class.variant]]
+  slug = "continuous-roll"
+  name = "Continuous Roll"
+  blurb = "Roll-rule-aware continuous series and front-month construction."
+  signals_symbol = "continuous_roll"
+  stats_symbol = "continuous_roll"

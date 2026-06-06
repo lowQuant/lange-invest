@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ variant.name }} · {{ asset_class.name }} — {{ site.name }}{% endblock %}
+{% block meta_description %}{{ variant.blurb }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi {{ asset_class.icon }}"></i> {{ asset_class.name }} · Strategy</span>
+        <h1>{{ variant.name }}</h1>
+        <p class="lead">{{ variant.blurb }}</p>
+    </div>
+    {% if snap and snap.generated_at %}
+    <span class="label-mono">Updated {{ snap.generated_at }}</span>
+    {% endif %}
+</div>
+
+{% include "partials/subnav.html" %}
+
+{# ── Headline stats ── #}
+{% if snap and snap.stats %}
+<div class="mb-3">{% with stats = snap.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
+{% endif %}
+
+{# ── Public chart (precomputed) ── #}
+<div class="qt-panel mb-3">
+    <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> {{ snap.chart.title if snap and snap.chart else 'Performance' }}</span></div>
+    <div class="qt-panel-body">
+        {% if snap and snap.chart %}
+            {% with chart_id = 'strat-chart', chart = snap.chart, subplots = snap.subplots %}
+                {% include "partials/chart_panel.html" %}
+            {% endwith %}
+        {% else %}
+            <div class="alert alert-info mb-0">No published chart yet for this strategy. Snapshots are written by the precompute task.</div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="qt-grid" style="grid-template-columns: 2fr 1fr;">
+    {# ── Live signals — gated component (HTMX fragment, access-wall fallback) ── #}
+    <div class="qt-panel">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-broadcast-pin"></i> Live signals</span>
+            <span class="badge bg-secondary">members</span>
+        </div>
+        <div class="qt-panel-body"
+             hx-get="/gated/strategy/{{ asset_class.slug }}/{{ variant.slug }}/signals"
+             hx-trigger="load"
+             hx-swap="innerHTML">
+            {# Server-rendered fallback shown until the fragment loads/!entitled. #}
+            {% include "partials/access_wall.html" %}
+        </div>
+    </div>
+
+    {# ── Universe ── #}
+    <div class="qt-panel">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-collection"></i> Universe</span></div>
+        <div class="qt-panel-body">
+            {% if snap and snap.universe %}
+            <div class="d-flex flex-wrap gap-1">
+                {% for sym in snap.universe %}<span class="badge bg-secondary">{{ sym }}</span>{% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Universe not published.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

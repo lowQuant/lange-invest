@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <span class="eyebrow">Systematic · Transparent · Repeatable</span>
+    <h1>Quant strategies, with the signals shown.</h1>
+    <p class="lead">{{ site.tagline }} Research notes, per-asset-class strategy pages with
+       live charts, and a transparent model portfolio — the live signals and real book are a
+       sign-in away.</p>
+    <div class="hero-actions">
+        <a href="/equities" class="btn btn-primary btn-lg"><i class="bi bi-bar-chart-line"></i> Explore strategies</a>
+        <a href="/articles" class="btn btn-outline-secondary btn-lg">Read the research</a>
+    </div>
+</section>
+
+<section class="mt-4">
+    <div class="page-head"><h2>Asset classes</h2></div>
+    <div class="qt-grid cols-2">
+        {% for ac in asset_classes %}
+        <a class="qt-tile" href="/{{ ac.slug }}">
+            <span class="qt-tile-eyebrow eyebrow"><i class="bi {{ ac.icon }}"></i> {{ ac.name }}</span>
+            <span class="qt-tile-title">{{ ac.name }}</span>
+            <span class="qt-tile-blurb">{{ ac.blurb }}</span>
+            <span class="qt-tile-meta">
+                {% for v in ac.variants %}<span class="badge bg-secondary">{{ v.name }}</span>{% endfor %}
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="mt-4">
+    <div class="page-head">
+        <h2>Latest research</h2>
+        <a href="/articles" class="btn btn-sm btn-outline-secondary">All articles <i class="bi bi-arrow-right"></i></a>
+    </div>
+    {% if recent_articles %}
+    <div class="qt-grid cols-3">
+        {% for a in recent_articles %}
+        <a class="qt-tile" href="/articles/{{ a.slug }}">
+            <span class="eyebrow">{{ a.date_display }}</span>
+            <span class="qt-tile-title">{{ a.title }}</span>
+            <span class="qt-tile-blurb">{{ a.summary }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="text-muted">No articles published yet.</p>
+    {% endif %}
+</section>
+{% endblock %}

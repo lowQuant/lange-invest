@@ -29,7 +29,6 @@ TAXONOMY = {
     "futures": {
         "trend": (0.14, 0.16, ["ES", "NQ", "CL", "GC", "ZN", "6E", "ZC", "HG"]),
         "carry": (0.10, 0.10, ["GC", "SI", "CL", "NG", "ZN", "ZB"]),
-        "continuous-roll": (0.09, 0.12, ["ES", "CL", "GC", "ZN", "6E"]),
     },
 }
 

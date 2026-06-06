@@ -1,0 +1,125 @@
+---
+title: Volatility Cones: A Filter for Short Volatility Trades
+date: 2025-01-05
+summary: When you sell options (i.e.
+tags: volatility, options
+category: Algorithmic Trading
+format: html
+---
+<p>When you sell options (i.e., go short volatility), you&rsquo;re implicitly making a forecast that the option implied volatility is overstated and realized volatility will be lower. But &ldquo;hope&rdquo; isn&rsquo;t a strategy&mdash;historical context is. This is where the volatility cone comes in. It shows you how low or high realized volatility has run in the past for various time horizons (e.g. 20 days, 40 days, 120 days).</p>
+
+<p>If implied volatility is currently at the higher end of that historical range (for a given horizon), it might be a prime spot to sell options. If the implied is stuck in the middle (or near historical lows) while there&rsquo;s a big Fed event looming, you might reconsider. The volatility cone is basically a quick filter&mdash;it doesn&rsquo;t guarantee profit, but it tells you whether the current implied volatility environment is historically &ldquo;cheap&rdquo; or &ldquo;expensive.&rdquo;</p>
+
+<p>Let&rsquo;s jump into the code. We start by importing the necessary libraries and downloading historical data for the Lulu Lemon stock:</p>
+
+<pre>
+<code class="language-python">
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+ticker = "LULU"
+end_date = "2025-01-02"
+start_date = "2021-01-02"
+
+df = yf.download(ticker, start=start_date, end=end_date)
+df.dropna(subset=["Close"], inplace=True)
+</code></pre>
+
+<p>Next, we calculate <em>log returns</em> from the closing prices:</p>
+
+<pre>
+<code class="language-python">
+df["LogRet"] = np.log(df["Close"] / df["Close"].shift(1))
+df.dropna(subset=["LogRet"], inplace=True)
+</code></pre>
+
+<p>Our goal is to look at <strong>rolling</strong> annualized volatility over various windows, such as 20, 40, 60 days, and so on. An advantage of rolling windows is that we get a lot of volatility values from our dataset, but as these values differ only slighty due to the nature of rolling windows (or moving averages) this can really underestimate the volatility. To account for this <a href="https://www.researchgate.net/publication/228431910_Volatility_Cones_and_Their_Sampling_Properties">Hodges &amp; Tompkins (2002)</a> propose a correction factor&nbsp;m_{\mathrm{var}}&nbsp;for the&nbsp;<em>variance</em>. For volatility (std. dev.), multiply by&nbsp;\sqrt{m_{\mathrm{var}}}. See their paper for more details.</p>
+
+<pre>
+<code class="language-python">
+def hodges_tompkins_factor(h, total_obs):
+    n = total_obs - h + 1
+    if n &lt;= 0:
+        return 1.0
+    denom = 1.0 - (h / n) + (h**2 - 1.0) / (3.0 * n**2)
+    if denom &lt;= 0:
+        return 1.0
+    return 1.0 / denom
+</code></pre>
+
+<p>The function above calculates the adjustment factor for a variance proposed by Hodges and Tompkins for a given window length and the number of total observations. As we are concerned about volatility we will take the square root of this factor.</p>
+
+<pre>
+<code class="language-python">
+windows = [20, 40, 60, 120, 240]
+total_obs = len(df["LogRet"])
+vol_data = {}
+
+for w in windows:
+    ht_var = hodges_tompkins_factor(w, total_obs)
+    ht_vol = np.sqrt(ht_var)
+    
+    rolling_vol = (
+        df["LogRet"]
+        .rolling(window=w)
+        .std()
+        .dropna()
+        * np.sqrt(252)
+        * ht_vol
+    )
+    vol_data[w] = rolling_vol.values
+</code></pre>
+
+<p>The code above loops over all window length of interest, calculates the adjustment factor and calculates annualized rolling volatiliy values for LULU from 2021 to 2025. These values are stored as numpy arrays for each window in the <em>dictionary</em> <strong>vol_data</strong>.</p>
+
+<p>To form the &quot;cone,&quot; we typically gather five summary statistics: <strong>minimum</strong>, <strong>25th percentile</strong>, <strong>median</strong>, <strong>75th percentile</strong>, and <strong>maximum</strong> volatility, then plot them for each window side by side.</p>
+
+<pre>
+<code class="language-python">stats = {}
+for w in windows:
+    arr = rolling_vols[w]
+    if len(arr) &gt; 0:
+        stats[w] = {
+            "Min":     np.min(arr),
+            "Q1":      np.percentile(arr, 25),
+            "Median":  np.median(arr),
+            "Q3":      np.percentile(arr, 75),
+            "Max":     np.max(arr),
+        }
+    else:
+        # If there's no data for some reason, fill with NaN
+        stats[w] = dict.fromkeys(["Min", "Q1", "Median", "Q3", "Max"], np.nan)
+
+stats_df = pd.DataFrame(stats).T
+</code></pre>
+
+<p>The <code>stats_df</code> DataFrame now contains one row per rolling window (20, 40, 60, etc.) and columns for <code>&quot;Min&quot;</code>, <code>&quot;Q1&quot;</code>, <code>&quot;Median&quot;</code>, <code>&quot;Q3&quot;</code>, and <code>&quot;Max&quot;</code>. Let&#39;s create a plot out of that!</p>
+
+<pre>
+<code class="language-python">
+plt.figure(figsize=(8,4))
+
+plt.plot(stats_df.index, stats_df["Max"],    label="Max", color="darkgray")
+plt.plot(stats_df.index, stats_df["Q3"],     label="75%", color="gray")
+plt.plot(stats_df.index, stats_df["Median"], label="Median", color="black")
+plt.plot(stats_df.index, stats_df["Q1"],     label="25%", color="gray")
+plt.plot(stats_df.index, stats_df["Min"],    label="Min", color="darkgray")
+
+plt.title("Volatility Cone for " + ticker)
+plt.xlabel("Window (Days)")
+plt.ylabel("Annualized Volatility")
+plt.ylim(0, 1)  # adjust the y-limit if needed
+plt.legend()
+plt.grid(True)
+plt.show()
+</code></pre>
+
+<p>&nbsp;</p>
+
+<p><img src="/static/blog/volatility-cones-a-filter-for-short-volatility-trades/0.png" style="height:399px; width:600px" /></p>
+
+<p>And that&rsquo;s it! We&rsquo;ve created a &ldquo;volatility cone&rdquo; that shows how <em>realized</em> annualized volatility for different rolling windows has varied over the past few years.&nbsp;Use these <em>ranges</em> to gauge if today&rsquo;s <strong>implied volatility</strong> is historically &ldquo;expensive&rdquo; or &ldquo;cheap&rdquo; for each horizon, and weigh that against upcoming events or changes in market conditions. For example, if you&rsquo;re considering selling a&nbsp;<strong>1‐month</strong>&nbsp;option, you look at the&nbsp;<strong>1‐month segment</strong>&nbsp;of the cone (the 20‐day stats). If the market&rsquo;s&nbsp;<strong>implied volatility</strong>&nbsp;for the next 20 days is at the&nbsp;<strong>80th percentile</strong>&nbsp;relative to historical realized distribution, that&rsquo;s potentially&nbsp;<strong>favorable</strong>&nbsp;for a short vol position&mdash;assuming you believe realized vol will revert.</p>
+
+<p>Link to the full code on Github - <a href="https://github.com/lowQuant/QuantIdeas/blob/master/Volatility_Cone.py">here</a>.</p>

@@ -76,6 +76,7 @@ async def robots():
         "Allow: /\n"
         "Disallow: /admin\n"
         "Disallow: /mcp\n"
+        "Disallow: /gated\n"
         f"Sitemap: https://{cfg.domain}/sitemap.xml\n"
     )
 

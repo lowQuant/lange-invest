@@ -1,0 +1,37 @@
+{# Chart fragment swapped into #chart-area. Chart.js + LangeChart are loaded by
+   the symbol page; here we just (re)build the canvases and mount. #}
+<div id="ac-panels">
+    <div style="position:relative; height:400px;"><canvas id="ac-main"></canvas></div>
+</div>
+<div class="d-flex justify-content-between align-items-center mt-2 px-1">
+    <span class="label-mono" id="ac-count"></span>
+    <button class="btn btn-sm btn-outline-secondary" onclick="window._langeCharts&&window._langeCharts.forEach(c=>c.resetZoom&&c.resetZoom())">
+        <i class="bi bi-arrows-angle-contract"></i> Reset zoom
+    </button>
+</div>
+<script>
+(function () {
+    const main = {{ chart | tojson }};
+    const subs = {{ (subplots or []) | tojson }};
+    if (window._langeCharts) window._langeCharts.forEach(c => c.destroy && c.destroy());
+    window._langeCharts = []; window._langeChartSpecs = [];
+
+    const panels = document.getElementById("ac-panels");
+    subs.forEach((sp, i) => {
+        const d = document.createElement("div");
+        d.style.cssText = "position:relative;height:150px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-1);";
+        const cv = document.createElement("canvas"); cv.id = "ac-sub-" + i;
+        d.appendChild(cv); panels.appendChild(d);
+    });
+
+    const total = (main.datasets || []).reduce((s, d) => s + (d.data || []).filter(v => v !== null).length, 0);
+    const cnt = document.getElementById("ac-count");
+    if (cnt) cnt.textContent = total.toLocaleString() + " points";
+
+    function draw() {
+        LangeChart.mount("ac-main", main, { isMain: true });
+        subs.forEach((sp, i) => LangeChart.mount("ac-sub-" + i, sp, { isMain: false }));
+    }
+    if (window.Chart && window.LangeChart) draw();
+})();
+</script>

@@ -28,7 +28,9 @@ class Article:
     summary: str
     tags: tuple[str, ...]
     image: str | None
-    body_md: str
+    body: str
+    is_html: bool
+    category: str = ""
 
     @property
     def date_display(self) -> str:
@@ -39,8 +41,10 @@ class Article:
 
     @property
     def html(self) -> str:
+        if self.is_html:
+            return self.body
         return _md.markdown(
-            self.body_md,
+            self.body,
             extensions=["fenced_code", "tables", "toc", "sane_lists"],
         )
 
@@ -60,11 +64,12 @@ def _parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
     return meta, body
 
 
-def _build(slug: str, text: str) -> Article:
+def _build(slug: str, text: str, is_html: bool) -> Article:
     meta, body = _parse_frontmatter(text)
     tags = tuple(
         t.strip() for t in meta.get("tags", "").split(",") if t.strip()
     )
+    fmt = meta.get("format", "").lower()
     return Article(
         slug=slug,
         title=meta.get("title", slug.replace("-", " ").title()),
@@ -72,7 +77,9 @@ def _build(slug: str, text: str) -> Article:
         summary=meta.get("summary", ""),
         tags=tags,
         image=meta.get("image") or None,
-        body_md=body,
+        body=body,
+        is_html=is_html or fmt == "html",
+        category=meta.get("category", ""),
     )
 
 
@@ -81,8 +88,11 @@ def _all() -> tuple[Article, ...]:
     if not ARTICLES_DIR.exists():
         return ()
     items = [
-        _build(p.stem, p.read_text(encoding="utf-8"))
+        _build(p.stem, p.read_text(encoding="utf-8"), is_html=(p.suffix == ".html"))
         for p in ARTICLES_DIR.glob("*.md")
+    ] + [
+        _build(p.stem, p.read_text(encoding="utf-8"), is_html=True)
+        for p in ARTICLES_DIR.glob("*.html")
     ]
     # Newest first; undated articles sink to the bottom.
     items.sort(key=lambda a: a.date or "", reverse=True)

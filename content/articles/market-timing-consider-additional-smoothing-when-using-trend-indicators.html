@@ -1,0 +1,108 @@
+---
+title: Market Timing - Consider Additional Smoothing When Using Trend Indicators
+date: 2023-02-18
+summary: Time in the markets beats timing the markets. That's what usually comes first to most critics of market timing strategies mind's and to be honest, I am also a fan of the classic buy & hold strategy.
+tags: market timing, backtest, python
+category: Investing
+format: html
+---
+<p>Time in the markets beats timing the markets. That&#39;s what usually comes first to most critics of market timing strategies mind&#39;s and to be honest, I am also a fan of the classic buy &amp; hold strategy. On the individual asset class level I am trying to be as passive and close to the market as possible. But...not every portfolio is well diversified...and - oh yea, cross-asset correlations tend to go wild during crises and, again, reduce portfolio diversification. Looking at the largest drawdowns of the S&amp;P 500 as the largest stock market in the world concludes that every investor is well advised to utilise some kind of market timing.&nbsp;</p>
+
+<p><a href="https://www.statista.com/statistics/1175227/s-and-p-500-major-crashes-change/"><img src="/static/blog/market-timing-consider-additional-smoothing-when-using-trend-indicators/0.png" /></a><br />
+As market timing strategies often use trend indicators in one form or the other, this article shows how to research and backtest the effectiveness of individual indicators as market timing signals using python. While I have some reservations about the use of backtests and would not advise to test 100 different indicators and use the one with the best backtest for your market timing strategy, there is actually one good use case here.</p>
+
+<h3 style="color:#aaaaaa; font-style:italic">Try additional smoothing when using trend indicators</h3>
+
+<p>What does that mean? Let&#39;s start with answering the question why trend indicators are popular market timing signals.</p>
+
+<p>Trend indicators are popular market timing signals because they are based on the idea that a trend is more likely to continue than to reverse. A fundamental concept in technical analysis.&nbsp;Trend indicators can be simple, like the moving average used in the example below, or more complex, such as the MACD (Moving Average Convergence Divergence), estimating some regression slopes or the Ichimoku Cloud. Regardless of the specific indicator used, they are all using historical data to identify the market trend. By doing so trend indicators give a smoothed representation of the price action. This is an important concept to understand and discuss a little further. The less smoothed a signal, the more current and responsive it is and, vice versa, the more smoothed, but slower it is. The former is creating more false signals and the latter runs the risk to produce a signal that&#39;s already too late to jump on the wagon. Finding the right balance is key, but goes again back to the idea to backtest different combinations of parameters for different indicators putting yourself at risk of overfitting to historic data.<br />
+Here&#39;s the idea: Instead of backtesting different indicators stay with your habits or the indicators you are comfortable with, but consider additional smoothing. That means when you are using daily data as inputs to your indicators (e.g. 50 day SMA, 38 day EMA, RSI etc.) try out weekly or monthly data as well. I have found great stability in going from daily to monthly data across several trend indicators suggesting that this form of additional smoothing is more important than the the actual indicator itself.</p>
+
+<p>The python code below shows a simple example how to test additional smoothing and compares the 200-day moving average - which is widely used to identify a long-term uptrend - with the 10-month moving average with regard to market timing effectiveness.</p>
+
+<p>&nbsp;</p>
+
+<h3 style="color:#aaaaaa; font-style:italic">Import the neccessary modules</h3>
+
+<pre>
+<code class="language-python">import pandas as pd
+import yfinance as yf
+import matplotlib.pyplot as plt</code>
+</pre>
+
+<h3 style="color:#aaaaaa; font-style:italic">Download Historic SPY Data</h3>
+
+<pre>
+<code class="language-python">df = yf.download(tickers = "SPY",period = "30y",interval = "1d")</code>
+</pre>
+
+<pre>
+<code class="language-python"># resample the data at the end of each month and select the last value of each month
+dfm = df.resample('M').last()
+
+# Calculate the 10 Month Moving Average for the monthly data
+dfm["10_Month_Moving_Average"] = dfm['Adj Close'].rolling(window=10).mean()
+# Calculate the 200 Day Moving Average for the daily data
+df["200_Day_Moving_Average"] = df['Adj Close'].rolling(window=200).mean()
+
+# Create Signals in the DataFrames: Buy=1 -&gt; If the price is higher than the moving average, Sell = 0
+ dfm["Signal"] = 0
+dfm.loc[dfm["Adj Close"] &gt; dfm["10_Month_Moving_Average"], "Signal"] = 1
+
+df["200D_Signal"] = 0
+df.loc[df["Adj Close"] &gt; df["200_Day_Moving_Average"], "200D_Signal"] = 1</code>
+</pre>
+
+<p>Now let&#39;s get both signals in one dataframe. In order to achieve that we are checking on every day if the last month&#39;s end was a buy signal (10-Month MA &lt; monthly closing price) and we will only buy/hold the SPY if that was the case</p>
+
+<pre>
+<code class="language-python"># Map the signal from monthly to daily data
+df["Signal"] = 0
+for i in range(len(df)):
+    current_date = df.index[i]
+    prev_month_end = current_date - pd.offsets.MonthEnd(1)
+    try:
+        signal = dfm.loc[prev_month_end, "Signal"]
+        df.loc[current_date, "Signal"] = signal
+    except KeyError:
+        pass</code>
+</pre>
+
+<h3 style="color:#aaaaaa; font-style:italic">Calculate Risk/Return Metrics and compare both to buy&amp;hold</h3>
+
+<pre>
+<code class="language-python"># Calculate the daily returns for the buy-and-hold strategy
+df["Buy&amp;Hold_Returns"] = df["Adj Close"].pct_change().fillna(0)
+
+# Calculate the daily returns for the market timing strategy
+df["MarketTiming_10Month"] = df["Signal"].shift(1) * df["Adj Close"].pct_change().fillna(0)
+df["MarketTiming_200Day"] = df["200D_Signal"].shift(1) * df["Adj Close"].pct_change().fillna(0)
+
+# Calculate the cumulative returns for both strategies
+df["Buy&amp;Hold_Cumulative_Returns"] = (1 + df["Buy&amp;Hold_Returns"]).cumprod()
+df["MarketTiming_10Month_Cumulative_Returns"] = (1 + df["MarketTiming_10Month"]).cumprod()
+df["MarketTiming_200Day_Cumulative_Returns"] = (1 + df["MarketTiming_200Day"]).cumprod()
+
+# Calculate the annualized returns and volatility for both strategies
+total_months = len(dfm)
+buy_and_hold_annualized_returns = (df["Buy&amp;Hold_Cumulative_Returns"].iloc[-1])**(12/total_months) - 1
+market_timing_10M_annualized_returns = (df["MarketTiming_10Month_Cumulative_Returns"].iloc[-1])**(12/total_months) - 1
+market_timing_200D_annualized_returns = (df["MarketTiming_200Day_Cumulative_Returns"].iloc[-1])**(12/total_months) - 1
+
+buy_and_hold_annualized_volatility = df["Buy&amp;Hold_Returns"].std() * (252 ** 0.5)
+market_timing_10M_annualized_volatility = df["MarketTiming_10Month"].std() * (252 ** 0.5)
+market_timing_200D_annualized_volatility = df["MarketTiming_200Day"].std() * (252 ** 0.5)
+
+# Calculate the Sharpe ratio for both strategies
+buy_and_hold_sharpe_ratio = buy_and_hold_annualized_returns / buy_and_hold_annualized_volatility
+market_timing_10M_sharpe_ratio = market_timing_10M_annualized_returns / market_timing_10M_annualized_volatility
+market_timing_200D_sharpe_ratio = market_timing_200D_annualized_returns / market_timing_200D_annualized_volatility</code>
+</pre>
+
+<p><img src="/static/blog/market-timing-consider-additional-smoothing-when-using-trend-indicators/1.png" /></p>
+
+<p><img src="/static/blog/market-timing-consider-additional-smoothing-when-using-trend-indicators/2.png" /></p>
+
+<p><img src="/static/blog/market-timing-consider-additional-smoothing-when-using-trend-indicators/3.png" /></p>
+
+<p>&nbsp;</p>

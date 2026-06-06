@@ -120,11 +120,3 @@ blurb = "Continuously-rolled futures programs across the liquid global complex â
   methodology = "A cross-sectional carry book that is long markets in backwardation and short those in contango, ranked by roll yield net of estimated cost. Positions are risk-weighted and netted against the trend book so the two programs share margin efficiently."
   signals_symbol = "carry"
   stats_symbol = "carry"
-
-  [[asset_class.variant]]
-  slug = "continuous-roll"
-  name = "Continuous Roll"
-  blurb = "The roll-rule engine that stitches expiring contracts into one clean, tradable series."
-  methodology = "Every futures strategy here trades a continuous series built by an explicit roll rule â€” front-month with a volume/open-interest trigger and a back-adjustment for the price gap at each roll. This page documents that construction so the backtests above are reproducible rather than a black box."
-  signals_symbol = "continuous_roll"
-  stats_symbol = "continuous_roll"

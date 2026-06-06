@@ -1,0 +1,85 @@
+---
+title: The Holy Grail of Investing: Testing Diversification with Python
+date: 2023-03-15
+summary: Ray Dalio, the founder of Bridgewater Associates, has long emphasized the importance of diversification in investing. In his book, "Principles," he calls diversification the "Holy Grail of Investing." In this article, we will test the conce
+tags: Diversification, Python, Ray Dalio, Portfolio Construction
+category: Coding
+format: html
+---
+<p>Ray Dalio, the founder of Bridgewater Associates, has long emphasized the importance of diversification in investing. In his book, &quot;Principles,&quot; he calls diversification the &quot;Holy Grail of Investing.&quot; In this article, we will test the concept of diversification by simulating a portfolio of uncorrelated assets using Python. We will then plot the portfolio risk as a function of the number of assets to demonstrate the risk reduction effects of diversification.</p>
+
+<h3>Setting Up the Simulation</h3>
+
+<p>First, let&#39;s set up a simple simulation to demonstrate the effect of diversification on portfolio risk. We will assume a 7% expected return for each asset and a 10% risk for each asset, and that the assets are uncorrelated with each other. We will use NumPy to generate random returns for each asset and create a correlation matrix to calculate the portfolio risk.</p>
+
+<pre>
+<code class="language-python">import numpy as np
+import matplotlib.pyplot as plt
+
+np.random.seed(42)
+
+num_assets = 60
+num_portfolios = 10000
+expected_return = 0.1
+risk = 0.1
+correlation = 0</code></pre>
+
+<p>&nbsp;In the code above, we set the number of assets to 6, the number of portfolios to 10,000, and the expected return and risk for each asset to 7% and 10%, respectively. We also set the correlation between the assets to 0, meaning they are uncorrelated.</p>
+
+<h3>Generating Random Returns</h3>
+
+<p>Next, we will generate random returns for each asset using NumPy&#39;s <code>random.normal()</code> function. This function generates random numbers from a normal distribution with the given mean (expected return) and standard deviation (risk).</p>
+
+<pre>
+<code class="language-python"># Generate random returns for each asset
+returns = np.random.normal(expected_return, risk, size=(num_portfolios, num_assets))</code></pre>
+
+<h3>Creating the Correlation Matrix</h3>
+
+<p>Now, we will create a correlation matrix that represents the correlation between each pair of assets in the portfolio. Since the assets are uncorrelated, we will fill the off-diagonal elements with zeros and the diagonal elements with ones.</p>
+
+<pre>
+<code class="language-python"># Generate the correlation matrix
+correlation_matrix = np.full((num_assets, num_assets), correlation)
+np.fill_diagonal(correlation_matrix, 1)</code></pre>
+
+<h3>Calculating the Portfolio Risk</h3>
+
+<p>With the random returns and correlation matrix, we can now calculate the portfolio risk for different numbers of assets. We will loop through each possible number of assets and calculate the portfolio risk accordingly.</p>
+
+<pre>
+<code class="language-python"># Calculate the portfolio risk
+portfolio_risks = []
+for i in range(1, num_assets + 1):
+    portfolio_weights = np.full(i, 1 / i)
+    portfolio_return = returns[:, :i] @ portfolio_weights
+    portfolio_std = np.sqrt(portfolio_weights @ correlation_matrix[:i, :i] @ portfolio_weights)
+    portfolio_risks.append(portfolio_std)</code></pre>
+
+<h3>&nbsp;Plotting the Results</h3>
+
+<p>Finally, we will use Matplotlib to plot the portfolio risk as a function of the number of assets. This will illustrate the risk reduction effect of diversification as described by Ray Dalio in his book.</p>
+
+<pre>
+<code class="language-python"># Plot the portfolio risk as a function of the number of assets
+plt.plot(range(1, num_assets + 1), portfolio_risks, marker='o')
+plt.xlabel("Number of Uncorrelated Assets")
+plt.ylabel("Portfolio Risk")
+plt.title("Risk Reduction through Diversification")
+plt.show()</code></pre>
+
+<h3><img src="/static/blog/the-holy-grail-of-investing-testing-diversification-with-python/0.png" /></h3>
+
+<h3>Conclusion</h3>
+
+<p>In this article, we tested the concept of diversification by simulating a portfolio of uncorrelated assets using Python. We demonstrated the risk reduction effects of diversification by plotting the portfolio risk as a function of the number of assets. The results show that as we increase the number of uncorrelated assets in the portfolio, the overall risk decreases, but with a diminishing marginal utility. That`s why investors like Warren Buffet keep saying don`t overdiversify. If you play around with the parameters you will see that the optimal number of assets in a portfolio is highly dependend on the correlation assumption.</p>
+
+<div>
+<div>
+<div>
+<p>Please note that the simulation presented here is a simplified version of real-world scenarios. In practice, finding truly uncorrelated assets can be challenging, and correlations between assets may change over time. However, the concept of diversification remains a fundamental principle in portfolio construction and risk management.</p>
+
+<p>By incorporating a diverse set of assets with varying risk profiles and correlations, investors can optimize their portfolios to achieve more consistent returns with lower risk. This approach to investing, as highlighted by Ray Dalio, can be a powerful tool in helping investors achieve their financial goals while minimizing exposure to unnecessary risks.</p>
+</div>
+</div>
+</div>

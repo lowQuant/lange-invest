@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% block title %}{{ symbol }} · {{ library }} — ArcticDB — {{ site.name }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb mb-3">
+    <a href="/arcticdb">ArcticDB</a> <span class="mx-2 divider-dot">/</span>
+    <a href="/arcticdb/{{ library }}">{{ library }}</a> <span class="mx-2 divider-dot">/</span> {{ symbol }}
+</nav>
+
+{% if error %}
+    <div class="alert alert-info">{{ error }}</div>
+{% else %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi bi-graph-up"></i> {{ library }} · symbol</span>
+        <h1 style="font-family:var(--mono);">{{ symbol }}</h1>
+    </div>
+    {% if desc %}
+    <div class="d-flex gap-3">
+        <div class="metric-mini"><span class="v">{{ '{:,}'.format(desc.rows or 0) }}</span><span class="l">rows</span></div>
+        <div class="metric-mini"><span class="v">{{ (desc.columns or []) | length }}</span><span class="l">cols</span></div>
+        {% if meta and meta.is_multiindex %}<div class="metric-mini"><span class="v text-up">{{ meta.n_contracts }}</span><span class="l">contracts</span></div>{% endif %}
+        {% if desc.date_range %}<div class="metric-mini"><span class="v" style="font-size:.8rem;">{{ desc.date_range[0][:10] }} → {{ desc.date_range[1][:10] }}</span><span class="l">range</span></div>{% endif %}
+    </div>
+    {% endif %}
+</div>
+
+{# ── Chart panel ── #}
+<div class="qt-panel mb-3">
+    <div class="qt-panel-head" style="flex-direction:column; align-items:stretch; padding:0;">
+        <div class="ac-toolbar">
+            <span class="title-line"><i class="bi bi-graph-up"></i> Chart</span>
+            {% if meta and meta.is_multiindex %}
+            <span class="ac-group"><span class="ac-lbl">Mode</span>
+                <select id="ac-source" class="form-select form-select-sm" style="width:120px;" onchange="onSource()">
+                    <option value="standard">Standard</option>
+                    <option value="contract" selected>Contract</option>
+                </select>
+            </span>
+            {% endif %}
+            <span class="ac-group" id="ac-x-group"><span class="ac-lbl">X</span>
+                <select id="ac-x" class="form-select form-select-sm" style="width:120px;" onchange="draw()">
+                    <option value="__index__">{{ (desc.index.name if desc and desc.index else 'index') }}</option>
+                    {% for c in desc.columns %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+                </select>
+            </span>
+            <span class="ac-group"><span class="ac-lbl">Type</span>
+                <select id="ac-type" class="form-select form-select-sm" style="width:115px;" onchange="onType()">
+                    <option value="line">Line</option>
+                    {% if meta and meta.has_ohlc %}<option value="candlestick">Candlestick</option>{% endif %}
+                    <option value="bar">Bar</option>
+                    <option value="scatter">Scatter</option>
+                </select>
+            </span>
+            <span class="ac-group"><span class="ac-lbl">Period</span>
+                <select id="ac-period" class="form-select form-select-sm" style="width:90px;" onchange="draw()">
+                    <option value="">Daily</option><option value="W">Weekly</option>
+                    <option value="M">Monthly</option><option value="Q">Quarterly</option><option value="Y">Yearly</option>
+                </select>
+            </span>
+        </div>
+
+        {% if meta and meta.is_multiindex %}
+        <div class="ac-toolbar" id="ac-contract">
+            <span class="ac-lbl">Contract</span>
+            <span class="ac-group">
+                <select id="ac-cmode" class="form-select form-select-sm" style="width:115px;" onchange="onCMode()">
+                    <option value="single">Continuous</option>
+                    <option value="overlay">Overlay</option>
+                    <option value="spread" selected>Spread</option>
+                </select>
+            </span>
+            <span class="ac-group"><span class="ac-lbl">Column</span>
+                <select id="ac-col" class="form-select form-select-sm" style="width:100px;" onchange="draw()">
+                    {% for c in desc.columns %}<option value="{{ c }}" {% if c|lower == 'close' %}selected{% endif %}>{{ c }}</option>{% endfor %}
+                </select>
+            </span>
+            <span class="ac-group" id="ac-single"><span class="ac-lbl">Rank</span>
+                <input type="number" id="ac-rank" class="form-control form-control-sm" value="1" min="1" max="24" style="width:55px;" onchange="draw()" title="1=front month">
+            </span>
+            <span class="ac-group" id="ac-spread"><span class="ac-lbl">Front</span>
+                <input type="number" id="ac-r1" class="form-control form-control-sm" value="1" min="1" max="24" style="width:50px;" onchange="draw()">
+                <span style="color:var(--ink-4);">−</span><span class="ac-lbl">Back</span>
+                <input type="number" id="ac-r2" class="form-control form-control-sm" value="2" min="1" max="24" style="width:50px;" onchange="draw()">
+            </span>
+            <span class="ac-group" id="ac-cont"><span class="ac-lbl">Adjust</span>
+                <select id="ac-method" class="form-select form-select-sm" style="width:125px;" onchange="draw()" title="Spliced has roll jumps; back-adjust removes them.">
+                    <option value="none">Unadjusted</option>
+                    <option value="back_diff" selected>Back-adj Δ</option>
+                    <option value="back_ratio">Back-adj ratio</option>
+                    <option value="perpetual">Perpetual</option>
+                </select>
+                <span class="ac-lbl">Roll</span>
+                <select id="ac-roll" class="form-select form-select-sm" style="width:90px;" onchange="draw()">
+                    <option value="expiry" selected>Expiry</option>
+                    <option value="calendar_5">−5d</option><option value="calendar_10">−10d</option><option value="calendar_20">−20d</option>
+                    {% if meta.has_volume %}<option value="volume">Volume</option>{% endif %}
+                </select>
+            </span>
+        </div>
+        {% endif %}
+
+        <div class="ac-toolbar" id="ac-ybar">
+            <span class="ac-lbl">Y</span>
+            <div class="d-flex gap-2 flex-wrap">
+                {% for c in desc.columns %}
+                <div class="form-check form-check-inline mb-0">
+                    <input class="form-check-input ac-y" type="checkbox" value="{{ c }}" id="acy-{{ loop.index }}" onchange="draw()">
+                    <label class="form-check-label small" for="acy-{{ loop.index }}" style="font-family:var(--mono);">{{ c }}</label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="ac-toolbar">
+            <span class="ac-lbl">Studies</span>
+            <div id="ac-studies" class="d-flex gap-1 flex-wrap"></div>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Study</button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',20);return false">SMA (20)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',50);return false">SMA (50)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',200);return false">SMA (200)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',12);return false">EMA (12)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',26);return false">EMA (26)</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="qt-panel-body" id="chart-area">
+        <div class="text-center py-5"><div class="spinner-border spinner-border-sm"></div> <span class="label-mono ms-2">Loading chart…</span></div>
+    </div>
+</div>
+
+{# ── Data table ── #}
+<div class="qt-panel">
+    <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-table"></i> Data</span></div>
+    <div class="qt-panel-body dense" id="ac-table"
+         hx-get="/arcticdb/api/table/{{ library }}/{{ symbol }}?page=1" hx-trigger="load" hx-swap="innerHTML">
+        <div class="text-center py-3"><div class="spinner-border spinner-border-sm"></div></div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if not error %}
+<style>
+    .ac-toolbar { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; padding:.45rem .75rem; border-bottom:1px solid var(--line-1); }
+    .ac-toolbar:last-of-type { border-bottom:1px solid var(--line-2); }
+    .ac-group { display:flex; align-items:center; gap:.35rem; }
+    .ac-group + .ac-group::before { content:""; width:1px; height:16px; background:var(--line-2); margin:0 .15rem; }
+    .ac-lbl { font-family:var(--mono); font-size:.625rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-3); }
+    .title-line { display:flex; align-items:center; gap:.4rem; margin-right:auto; font-family:var(--mono); font-size:.75rem; font-weight:500; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-1); }
+    .title-line .bi { color:var(--ink-3); }
+    .metric-mini { display:flex; flex-direction:column; }
+    .metric-mini .v { font-family:var(--mono); font-size:.875rem; color:var(--ink-1); font-variant-numeric:tabular-nums; }
+    .metric-mini .l { font-family:var(--mono); font-size:.6rem; text-transform:uppercase; letter-spacing:.1em; color:var(--ink-3); }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="{{ url_for('static', path='js/charts.js') }}"></script>
+<script>
+const LIB = {{ library | tojson }}, SYM = {{ symbol | tojson }};
+const IS_MULTI = {{ 'true' if meta and meta.is_multiindex else 'false' }};
+let studies = [];
+
+function isContract() { const s = document.getElementById("ac-source"); return IS_MULTI && (!s || s.value === "contract"); }
+function selY() { return Array.from(document.querySelectorAll(".ac-y:checked")).map(c => c.value); }
+
+function onType() { syncY(); draw(); }
+function onSource() {
+    const c = isContract();
+    const cc = document.getElementById("ac-contract"); if (cc) cc.style.display = c ? "" : "none";
+    const xg = document.getElementById("ac-x-group"); if (xg) xg.style.display = c ? "none" : "";
+    syncY(); if (c) onCMode(); else draw();
+}
+function onCMode() {
+    const m = document.getElementById("ac-cmode").value;
+    document.getElementById("ac-single").style.display = m === "single" ? "" : "none";
+    document.getElementById("ac-spread").style.display = (m === "spread" || m === "overlay") ? "" : "none";
+    document.getElementById("ac-cont").style.display = m === "spread" ? "none" : "";
+    draw();
+}
+function syncY() {
+    const ybar = document.getElementById("ac-ybar");
+    const show = !isContract() && document.getElementById("ac-type").value !== "candlestick";
+    ybar.style.display = show ? "" : "none";
+    if (show && selY().length === 0) {
+        const close = Array.from(document.querySelectorAll(".ac-y")).find(c => c.value.toLowerCase() === "close");
+        (close || document.querySelector(".ac-y")) && ((close || document.querySelector(".ac-y")).checked = true);
+    }
+}
+function addStudy(t, p) { studies.push({type:t, period:p}); renderStudies(); draw(); }
+function rmStudy(i) { studies.splice(i,1); renderStudies(); draw(); }
+function renderStudies() {
+    document.getElementById("ac-studies").innerHTML = studies.map((s,i) =>
+        `<span class="badge bg-info">${s.type.toUpperCase()}(${s.period}) <a href="#" onclick="rmStudy(${i});return false" style="color:inherit;">×</a></span>`).join("");
+}
+
+function draw() {
+    const type = document.getElementById("ac-type").value;
+    const period = document.getElementById("ac-period").value;
+    let url = `/arcticdb/api/chart/${encodeURIComponent(LIB)}/${encodeURIComponent(SYM)}?chart_type=${type}`;
+    if (period) url += `&period=${period}`;
+    if (isContract()) {
+        const m = document.getElementById("ac-cmode").value;
+        url += `&contract_mode=${m}&contract_col=${encodeURIComponent(document.getElementById("ac-col").value)}`;
+        if (m === "single") url += `&contract_rank=${document.getElementById("ac-rank").value}`;
+        else { url += `&spread_rank1=${document.getElementById("ac-r1").value}&spread_rank2=${document.getElementById("ac-r2").value}`; }
+        if (m !== "spread") url += `&continuous_method=${document.getElementById("ac-method").value}&roll_rule=${document.getElementById("ac-roll").value}`;
+    } else {
+        url += `&x_col=${encodeURIComponent(document.getElementById("ac-x").value)}`;
+        if (type !== "candlestick") {
+            const y = selY();
+            if (y.length === 0) { document.getElementById("chart-area").innerHTML = '<div class="text-center py-5 label-mono" style="color:var(--ink-4)">Pick at least one Y column.</div>'; return; }
+            url += `&y_cols=${encodeURIComponent(y.join(","))}`;
+        }
+    }
+    if (studies.length) url += `&studies=${encodeURIComponent(JSON.stringify(studies))}`;
+    htmx.ajax("GET", url, "#chart-area");
+}
+
+document.addEventListener("themechange", () => setTimeout(draw, 50));
+document.addEventListener("DOMContentLoaded", () => { if (IS_MULTI) onSource(); else { syncY(); } draw(); });
+</script>
+{% endif %}
+{% endblock %}

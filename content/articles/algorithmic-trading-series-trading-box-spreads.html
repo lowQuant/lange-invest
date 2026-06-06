@@ -1,0 +1,70 @@
+---
+title: Algorithmic Trading Series: Trading Box Spreads
+date: 2023-05-14
+summary: For those who have spent their careers as option market makers or traders on prop desks, the concept of a box spread will be very familiar. However, if you're not within these circles, the box spread might seem like a new concept, even thou
+tags: Arbitrage, Algorithmic Trading, Interactive Brokers, Option Strategies
+category: Algorithmic Trading
+format: html
+---
+<h1>Unboxing the Box Spread: An Advanced Options Strategy</h1>
+
+<p>For those who have spent their careers as option market makers or traders on prop desks, the concept of a box spread will be very familiar. However, if you&#39;re not within these circles, the box spread might seem like a new concept, even though it has been around for several decades.</p>
+
+<p>So, what is a box spread? Simply put, it&#39;s a four-leg option trade that aims to secure <strong>a fixed payoff at a specific time in the future</strong>. It might sound complicated at first glance, but it&#39;s quite straightforward when broken down. The box spread is a synthetic loan that can be compared to a zero-coupon bond that is initially bought at a discount and steadily increases in price as it approaches its maturity date.</p>
+
+<h2>Yes, I know...this sounds boring. So why do I bring this up?</h2>
+
+<p>Two main reasons. Firstly, the current interest rate environment very interesting. Negative interest rates seem like an absurdity of the past. Global inflation and the debt ceiling issue are driving interest rate volatility higher. At the same time the interest rate differences along the curve offer&nbsp;great <strong> arbitrage opportunities</strong> that we can exploit trading box spreads.<br />
+Secondly, box spreads can be <strong>more tax efficient</strong> - at least they are in my tax jurisdiction (Luxembourg). While interest income (e.g. from a term deposit) is taxable in most tax jurisdictions, the profit of a long box spread is only realized at maturity. So, if you live in a country like Luxembourg where realized gains of an investment holding period above 6 months are tax exempt you better buy a box spread than lending the money to your bank.<br />
+Lastly, I think this topic is well suited to introduce algorithmic trading as a new blog category. The higher the complexity of a financial instrument the more it makes sense to use program code to analyze and trading them. This is the case for options and trading box spreads is the perfect example why a direct connection to your brokerage account via API can be a game changer in finding arbitrage opportunities in the market.</p>
+
+<h2>The Mechanics of a Box Spread</h2>
+
+<p>There is a wide range of resources on the web where you will find an explanation of the box spread strategy (e.g. see <a href="https://www.investopedia.com/terms/b/boxspread.asp">Investopedia</a>). In contrast to most articles explaining the box spread as a combination of a bull call spread and a bearish put spread, I find it more intuitive to think of the box as the <strong>combination of a synthetic long</strong> at a lower strike price (K1) <strong>and a</strong> <strong>synthetic short position</strong> at a higher strike (K2).</p>
+
+<p>The synthetic long position consists of buying a call option (unlimited upside, but limited downside in the amount of the call premium paid) and selling a put option (limited upside in the amount of the premium received from selling the put, unlimited downside).<br />
+And vice versa the synthetic short consists of buying a put and selling a call.</p>
+
+<p>The <strong>combination of the two synthetic positions is market neutral</strong> where the <strong>profit is equal to (K2 - K1)</strong> the difference between the two strike prices.</p>
+
+<p>&nbsp;</p>
+
+<h2><img src="/static/blog/algorithmic-trading-series-trading-box-spreads/0.png" /></h2>
+
+<p>The S&amp;P 500 Index closed at 4124 index points last Friday. Suppose we entered a synthetic long position at $4100 (K1) and a synthetic short position at $4200 (K2).</p>
+
+<p><strong>Example 1: S&amp;P500 Index at 4000</strong></p>
+
+<p>When the index is at 4000 (below K1), the synthetic long position at K1 results in a loss because the index is below the strike price. The payoff would be 4000 - 4100 = -$100. The synthetic short position at K2, however, would be profitable, with a payoff of 4200 - 4000 = $200. Leading to the expected profit of K2 - K1 = 4100 - 4000 = $100.</p>
+
+<p><strong>Example 2: S&amp;P500 Index at 4300</strong></p>
+
+<p>When the index is at 4300 (above K2), the synthetic long position at K1 results in a profit because the index is above the strike price. The payoff would be 4300 - 4100 = $200. However, the synthetic short position at K2 would result in a loss, with a payoff of 4200 - 4300 = -$100. Again leading to the expected profit of $100.</p>
+
+<p>&nbsp;</p>
+
+<h2>The Risks</h2>
+
+<pre>
+&nbsp;</pre>
+
+<h4>1. Opportunity Costs</h4>
+
+<p>A lot of resources covering the box spread mention that its an arbitrage strategy and a long box is essentially risk-free. First of all, I have a problem with the word &#39;arbitrage&#39; most articles use it in the context with box spreads. When you trade a box spread you are essentially lending money and you receive the difference of the two strike prices (K2 - K1) upon the expiration date. Lending money, however, occurs opportunity costs and one should not talk about a zero-cost or arbitrage strategy when simply buying a long box spread. <strong>Not our problem:</strong> In the course of this series we will compare the implied interest rates of various box spread options with opportunities we can find in the money market and seek for real arbitrage profits.</p>
+
+<h4>2. Counterparty Risk</h4>
+
+<p>While the market risk of a box spread is zero, it should be mentioned that you or every option trader has the risk that the counterparty fails to deliver their contractual obligations. The counterparty in question for box spreads is the Options Clearing Corporation (OCC) that is responsible for clearing option contracts. The risk of a failed settlement is, however, very minimal as the OCC requires investors to provide a margin and the CBOE is also providing additional margin that is used to clear the options traded. In fact, the OCC has the same credit rating as US Sovereign Debt and the Federal Reserve will likely intervene if anything goes wrong as the OCC is classified as a Systemically Important Financial Market Utility (SIFMU).</p>
+
+<h4>3. Implementation Risk</h4>
+
+<p>The box spread is an advanced option strategy and implementation errors can lead to high financial losses.<br />
+The best known example for a failed implementation is <a href="https://www.reddit.com/r/wallstreetbets/comments/ahy7dy/the_legend_of_1r0nyman/?st=JR5RDQ9H&amp;sh=0dfe8529">The legend of 1RONYMAN</a> (the link for a funny video summarizing what went wrong). 1RONYMAN was a member of the Reddit community WallStreetBets who realized a loss of more than $57,000 on $5,000 equity, because he traded American style options that can be executed before expiration date. That is why you should only implement a box for European style options.</p>
+
+<h2>Outlook</h2>
+
+<p>Now that we know the box spread basics we can move on to the fun part. In the next article of this series we will connect to our brokerage account via API in python and screen the S&amp;P 500 Index Options for arbitrage opportunities. A general remark: I am planning to cover Alpaca markets and Interactive Brokers in the algorithmic trading section of this blog. However, trading options is not yet possible with alpaca so I will only showcase the strategy for Interactive Brokers. With Interactive Brokers (IBKR) you have global market access (you can even trade Chinese equities via Stock Connect) and although their user interface is a bit complex I can highly recommend IBKR for their order execution technology and competitive commission rates ($0.15 to $0.65 per options contract). IBKR&#39;s extensive API support make it a top choice for individuals and institutions involved in algorithmic trading.</p>
+
+<h2>Support my Blog</h2>
+
+<p>If you are interested in opening an account with Interactive Brokers, please conside using my <a href="https://ibkr.com/referral/johannes212">referral link</a> to support my blog and win up to $1000 in IBKR Stock based on their referral programs terms and conditions.</p>

@@ -1,0 +1,230 @@
+---
+title: Algorithmic Trading Series: Trading Box Spreads Part II
+date: 2023-05-29
+summary: ​In this article, we will connect to Interactive Brokers via the ib_insync Python module, fetch an option chain, and identify potential box spread opportunities.
+tags: Arbitrage, Algorithmic Trading, Interactive Brokers, Option Strategies
+category: Algorithmic Trading
+format: html
+---
+<p>​In this article, we will connect to Interactive Brokers via the ib_insync Python module, fetch an option chain, and identify potential box spread opportunities.</p>
+
+<p><strong>Prerequisites</strong></p>
+
+<p>To follow along, you&#39;ll need:</p>
+
+<ul>
+	<li>An Interactive Brokers account.</li>
+	<li>Python 3.6 or later with the ib_insync library installed. You can install it with pip install ib_insync.</li>
+	<li>Trader Workstation (TWS) or IB Gateway software running on your machine, available for download from the Interactive Brokers website.</li>
+</ul>
+
+<p><strong>Why TWS or IB Gateway?</strong></p>
+
+<p>Interactive Brokers API needs a running session of either TWS or IB Gateway to operate. They act as a bridge between the API and Interactive Brokers&#39; server. Both are similar, but they have some differences:</p>
+
+<ul>
+	<li>TWS has a graphical interface and is designed for manual traders who want to click buttons to make their trades.<br />
+	You can download it <a href="https://www.interactivebrokers.com/en/trading/tws-updateable-latest.php"><span style="color:#0563c1">here</span></a>.</li>
+	<li>IB Gateway is a lightweight, less resource-intensive solution that is designed for automated trading. It has a minimal user interface.You can download it <a href="https://www.interactivebrokers.eu/en/trading/ibgateway-latest.php"><span style="color:#0563c1">here</span></a>.</li>
+</ul>
+
+<p>For this guide, you can use either TWS or IB Gateway, but I recommend using TWS in the beginning to have an overview what is happening when you are placing orders via the ib_insync Python module.</p>
+
+<p><strong>Connecting to Interactive Brokers</strong></p>
+
+<p>For our purposes we are importing the python modules pandas, numpy and we are importing everything from the ib_insync Python module, indicated by the * and create an instance of the IB class:</p>
+
+<pre>
+<code class="language-python">import pandas as pd
+import numpy as np
+
+from ib_insync import *
+
+# util.startLoop() # uncomment this line in a jupyter notebook
+
+ib = IB()</code></pre>
+
+<p>Next, we connect to Interactive Brokers:</p>
+
+<pre>
+<code class="language-python">ib.connect('127.0.0.1', 7497, clientId=1)</code></pre>
+
+<p>In this command, &#39;127.0.0.1&#39; is the IP address (localhost), 7497 is the port, and clientId is an identifier for the client. If you&#39;re using TWS, the port is usually 7496 or 7497, and if you&#39;re using IB Gateway, it&#39;s typically 4001 or 4002. Make sure you replace these values with the ones you use.</p>
+
+<p>After running the connect command, if everything is set up correctly, you should be connected to your Interactive Brokers account.</p>
+
+<p><strong>Fetching the Option Chain</strong></p>
+
+<p>Now that we are connected to our brokerage account, there is actually one last step prerequisite missing - a market data subscription. Don&#39;t worry it&#39;s not a $100 per month. Interactive Brokers usually offers them quite cheap if you classified the usage of your IBKR account as non-professional.</p>
+
+<p>You find the market data subscription settings in the web interface of your account under &#39;Settings&#39; and then &#39;Market Data Subscriptions&#39;. For the purpose of trading S&amp;P 500 Index options - the most liquid options market - we will need the following two subscriptions:<br />
+<img alt="Ein Bild, das Text, Schrift, Reihe, Screenshot enthält.
+
+Automatisch generierte Beschreibung" src="/static/blog/algorithmic-trading-series-trading-box-spreads-part-ii/0.png" style="height:171px; width:1144px" /></p>
+
+<p>While the price may vary for you based on your country and account size it should not be too expensive. For me it&#39;s only $11.50 per month which I am more than glad paying to get rid off delayed prices.<br />
+If this is still expensive for you, there is a cheaper alternative: You can simply subscribe to the US Option Exchanges OPRA in combination with CME Futures data (which is only $3/month) and look at options on the E-Mini S&amp;P 500 Future instead of normal index options. Just make yourself familiar with the contract specifications and make sure you are looking at European style options. You will find all details on the CME Group homepage (<a href="https://www.cmegroup.com/markets/equities/sp/e-mini-sandp500.contractSpecs.options.html#optionProductId=138"><span style="color:#0563c1">contract specs here</span></a>/ <a href="https://www.cmegroup.com/trading/equity-index/files/es-options-product-codes-and-listing-calendar.pdf"><span style="color:#0563c1">overview on different option types here</span></a>).</p>
+
+<p>In the following we will look at the most liquid options market, the S&amp;P 500 index. With high volume and tighter spreads, the S&amp;P 500 is a good starting point for our quest to find box spread opportunities.</p>
+
+<pre>
+<code class="language-python">spx_index = Index('SPX', exchange='CBOE')
+
+ib.qualifyContracts(spx_index)
+
+chains = ib.reqSecDefOptParams(spx_index.symbol, '', spx_index.secType, spx_index.conId)
+
+print(chains)</code></pre>
+
+<p>In this code, we instantiate the S&amp;P 500 index object and use the function qualifyContracts to fetch all missing information such as the conId (contract Id). With this information, we can fetch all available option chains for this index with the function reqSecDefOptParams that look like this:</p>
+
+<p><img src="/static/blog/algorithmic-trading-series-trading-box-spreads-part-ii/1.png" style="height:142px; width:1330px" /></p>
+
+<p>As we can see, we can route S&amp;P Index options via CBOE, IBUSOPT, where IBKR clients can interact with IBKR&#39;s retail order flow, and via SMART which is IBKR&#39;s best execution routing. In terms of trading classes there are only SPX weekly and end of month options (SPXW) and the regular SPX options that settle on the 3rd Friday of a month (see <a href="https://cdn.cboe.com/resources/spx/spx-fact-sheet.pdf"><span style="color:blue">here </span></a>for more). In the case of the S&amp;P 500 index the trading class does not really matter for our purpose as both are European style options, but if you consider trading E-Micro S&amp;P 500 Future options be assured to trade the right trading class.</p>
+
+<p>With list comprehension we can filter out the chains we are interested in:</p>
+
+<pre>
+<code class="language-python">[chain] = [c for c in chains if c.tradingClass=='SPX' and  c.exchange=='SMART']</code></pre>
+
+<p>This time simple slicing, chains[0], would have done the trick, but the above method is more robust and you can easily amend it if you are e.g. interested in all trading classes.</p>
+
+<p><strong>Getting Our Options Universe</strong></p>
+
+<p>Now, we proceed to specify the strikes, expirations, and rights of the options we want to trade:</p>
+
+<pre>
+<code class="language-python">strikes = [strike for strike in chain.strikes if strike % 50 == 0
+
+           and spx_price - 500 &lt; strike &lt; spx_price + 500]
+
+expirations = sorted(exp for exp in chain.expirations)
+
+rights = ['P', 'C']
+
+contracts = [Option('SPX', expiration, strike, right, 'CBOE', tradingClass='SPX')
+
+        for right in rights
+
+        for expiration in expirations
+
+        for strike in strikes]</code></pre>
+
+<p>We are interested in strikes that are a multiple of 50 and within a range of the current SPX price. We sort all the available expirations, specify the rights we&#39;re interested in (puts and calls), and then construct a list of Option objects for these strikes, expirations, and rights. The resulting contracts list contains all the potential contracts we can trade.</p>
+
+<p>Moving forward, we need to qualify these contracts and fetch their respective tickers:</p>
+
+<pre>
+<code class="language-python">contracts = ib.qualifyContracts(*contracts)
+
+ib.reqMarketDataType(1) # 1: live prices, 3: delayed prices 4: delayed end of day prices
+
+tickers = ib.reqTickers(*contracts)</code></pre>
+
+<p>The function reqTickers returns us a snapshot of all tickers (where * is indicating multiple contracts). Then we can use a utility function of the ib_insync python module to convert this list of ticker snapshots into a pandas DataFrame.</p>
+
+<pre>
+<code class="language-python">df = util.df(tickers)[['contract','bid','bidSize','ask','askSize']]</code></pre>
+
+<p>&nbsp;We can enrich this DataFrame with more information from the contract attribute of the ticker object from the tickers list. We are interested in the strike, the right, and the execution date:</p>
+
+<pre>
+<code class="language-python">df[["lastTradeDateOrContractMonth",'strike','right']] = util.df(
+
+[ticker.contract for ticker in tickers])[['lastTradeDateOrContractMonth','strike','right']]
+
+df = df.rename({'lastTradeDateOrContractMonth':'expiration'},axis=1)
+
+
+# convert expiration to datetime format
+
+df["expiration"] = pd.to_datetime(df["expiration"], format='%Y%m%d')
+
+
+# create a new column for days until expiration
+
+df["days_until_expiration"] = (df["expiration"] - pd.Timestamp(datetime.today())).dt.days
+
+
+# filter out option contracts without volume
+
+df = df[(df['askSize']&gt;0) &amp; (df['bidSize']&gt;0)]</code></pre>
+
+<p>The resulting DataFrame looks something like this:<br />
+<img alt="Ein Bild, das Text, Screenshot, Schrift enthält.
+
+Automatisch generierte Beschreibung" src="/static/blog/algorithmic-trading-series-trading-box-spreads-part-ii/2.png" style="height:385px; width:1140px" /></p>
+
+<p><strong>Screening the Options Universe</strong></p>
+
+<p>Now that we have this DataFrame, we can find potential box spread opportunities by calculating the outlay for creating a box spread with different strike prices. I have defined a function for this that is basically just computing the initial premium paid (long box) or premium received (short box) as you would do it by hand:</p>
+
+<pre>
+<code class="language-python">def calc_box_outlay(df, k1,k2, exp, long=True):
+
+    # Mask for the condition - we want to make sure we have bid/ask for all options
+
+    mask = (df["strike"].isin([k1,k2])) &amp; (df["expiration"] == exp)
+
+    has_null = df[mask].isnull().any().any()
+
+    if has_null or len(df[mask])&lt;4:
+
+        box_outlay = None
+
+        return box_outlay
+
+    else:
+
+        if long:
+
+            long_call = df[(df['strike']==k1) &amp; (df['right'] == 'C') &amp; (df['expiration'] == exp)]['ask']
+
+            short_put =df[(df['strike']==k1) &amp; (df['right'] == 'P') &amp; (df['expiration'] == exp)]['bid']
+
+            synthetic_long_outlay = short_put.values[0] - long_call.values[0]
+
+
+            long_put = df[(df['strike']==k2) &amp; (df['right'] == 'P') &amp; (df['expiration'] == exp)]['ask']
+
+            short_call =df[(df['strike']==k2) &amp; (df['right'] == 'C') &amp; (df['expiration'] == exp)]['bid']
+
+            synthetic_short_outlay = short_call.values[0] - long_put.values[0]
+
+            box_outlay = synthetic_long_outlay + synthetic_short_outlay
+
+
+        else:
+
+            short_call = df[(df['strike']==k1) &amp; (df['right'] == 'C') &amp; (df['expiration'] == exp)]['bid']
+
+            long_put =df[(df['strike']==k1) &amp; (df['right'] == 'P') &amp; (df['expiration'] == exp)]['ask']
+
+            synthetic_long_outlay = short_call.values[0] - long_put.values[0]
+
+
+            short_put = df[(df['strike']==k2) &amp; (df['right'] == 'P') &amp; (df['expiration'] == exp)]['bid']
+
+            long_call =df[(df['strike']==k2) &amp; (df['right'] == 'C') &amp; (df['expiration'] == exp)]['ask']
+
+            synthetic_short_outlay = short_put.values[0] - long_call.values[0]
+
+            box_outlay = synthetic_long_outlay + synthetic_short_outlay +k2-k1
+
+       
+
+        return abs(box_outlay)</code></pre>
+
+<p>In a final step I am iterating over the different expiration days of the option contracts as well as over all possible box spread combinations within these. Finally, I am calculating the expected return for each of these combinations and, to compare apples with apples, I am annualizing the return numbers.&nbsp;I won&#39;t show the code at this point as this article is already long enough, but you can simple ask chatGPT if you struggle to follow on your own. The result is a dataframe that looks like this:</p>
+
+<p><img alt="Ein Bild, das Text, Screenshot, Schrift, Schwarz enthält.
+
+Automatisch generierte Beschreibung" src="/static/blog/algorithmic-trading-series-trading-box-spreads-part-ii/3.png" style="height:325px; width:1707px" /></p>
+
+<p>The above are some of the current <strong>long box spread combination returns</strong> that one can expect to achieve for expiration dates that are more than 183 days in the future (this is the holding period that I need to circumvent taxes). If you go down the curve the annualized returns go slightly up, however, the<strong> real spicyness is</strong> not on the long side where you lend money out, but <strong>on the short side</strong> where you borrow money from the options market. You can compare the current yield of the S&amp;P 500 options market with the current yield of the US-Treasuries to stay in the somewhat riskless world and hunt some real arbitrage profits or simply use this money to invest with a little higher leverage in the stock market. The best part is that there are even profitable short box combinations (on a standalone basis) out there with odd strike combinations that human option traders wouldn&#39;t even think of to input in an option strategy constructor. After all, this slight edge, this additional return, can be the secret ingredient that elevates your trading performance, setting you apart from even the top 1% of traders.</p>
+
+<p>That&#39;s it for the algo trading series on box spreads so far. Obviously, there is much more to show here - e.g. showing you how to actually place a trade via the ib_insync module&#39;s ComboOrder object, but I am pretty sure this is a good starting point for you to continue. If there is enough interest in a part III, let me know and I will think about it.</p>
+
+<p><strong>Support my Blog</strong></p>
+
+<p>If you are interested in opening an account with Interactive Brokers, please conside using my <a href="https://ibkr.com/referral/johannes212"><span style="color:blue">referral link</span></a> to support my blog and win up to $1000 in IBKR Stock based on their referral programs terms and conditions.</p>

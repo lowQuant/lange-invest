@@ -1,0 +1,48 @@
+---
+title: Initializing Git For Version Control
+date: 2023-02-17
+summary: Github is a cloud like dropbox, but for code. Integrating the use of github in your quant projects can save you a lot of time and space on all your other clouds while you change between your workplaces and computers.
+tags: Coding, Github, New Project
+category: Coding
+format: html
+---
+<p>Github is a cloud like dropbox, but for code. Integrating the use of github in your quant projects can save you a lot of time and space on all your other clouds while you change between your workplaces and computers.</p>
+
+<hr />
+<p>This article is for my personal memory only. There are some good git(hub) tutorials on youtube if you want a more detailed guide on github.</p>
+
+<hr />
+<p>Setting up Git for the first time on a new project is fairly simple, you just need to enter these five commands into your terminal. Be sure to be sitting in the directory where your project is located!</p>
+
+<p>You only need to do this once, right when you start your new project. If you create a completely new project, you&rsquo;ll have to go through these commands again. But only once <em>per project&hellip;</em></p>
+
+<pre>
+<code>
+$ git config --global user.name "Your Name"
+$ git config --global user.email "you@youraddress.com"
+$ git config --global push.default matching
+$ git config --global alias.co checkout
+$ git init
+</code>
+</pre>
+
+<p>After this setup in the Git Bash terminal go to github.com and login.&nbsp; From create a &#39;New Repository&#39;:</p>
+
+<p><img src="/static/blog/initializing-git-for-version-control/0.png" /></p>
+
+<p>This will bring you to the following page which shows how to finally upload your files to the github cloud.</p>
+
+<p><img src="/static/blog/initializing-git-for-version-control/1.png" /></p>
+
+<p>You don&#39;t need to run every command like &#39;git add README.md&#39;. It&#39;s just best practice to do so.</p>
+
+<p><br />
+Running these commands should be sufficient:<br />
+<code>git add .<br />
+git commit -m &#39;initial commit&#39;<br />
+git remote add origin *your link to the repository&#39;<br />
+git push -u origin master</code></p>
+
+<p>Youcan run these commands every time before and after you are doing major changes to yourcode and push all files to github. Your code is now accessible on github from everywhere and your dropbox space will thank you.</p>
+
+<p>&nbsp;</p>

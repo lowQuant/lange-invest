@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}ArcticDB — {{ site.name }}{% endblock %}
+{% block meta_description %}Browse the ArcticDB data libraries. Read-only, open to anyone.{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi bi-hdd-stack"></i> ArcticDB</span>
+        <h1>Data libraries</h1>
+        <p class="lead">Browse the raw data behind the strategies — read-only.
+            {% if is_admin %}<span class="badge bg-primary">admin · full instance</span>{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if not connected %}
+<div class="alert alert-info">The data engine isn't connected here. With a live ArcticDB connection
+   (<code>LANGE_DB_URI</code> or S3 env vars) these libraries become browsable.</div>
+{% endif %}
+
+<div class="qt-grid cols-3">
+    {% for item in libs %}
+    <a class="qt-tile" href="/arcticdb/{{ item.name }}">
+        <span class="qt-tile-eyebrow eyebrow"><i class="bi bi-table"></i> {{ item.name }}</span>
+        <span class="qt-tile-title">{{ item.label }}</span>
+        {% if item.description %}<span class="qt-tile-blurb">{{ item.description }}</span>{% endif %}
+        <span class="qt-tile-meta">
+            {% if item.count is not none %}<span class="badge bg-secondary">{{ item.count }} symbols</span>{% endif %}
+            {% if item.chart %}<span class="badge bg-primary">charting</span>{% endif %}
+        </span>
+    </a>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,169 @@
+---
+title: How useful are sentiment surveys for tactical asset allocation?
+date: 2023-04-27
+summary: This article analyses the usefulness of sentiment surveys for tactical asset allocation purposes based on a subset of S&P Global's Investment Manager Index. Instead of bragging with extremely awesome performance results of your overfit in-s
+tags: investing, Investment Manager Index, S&P Global, sentiment surveys, backtest
+category: Investing
+format: html
+---
+<p>This year I was invited to contribute to the <em>S&amp;P Global </em><em>Investment Manager Index</em> (IMI) which is a survey-based indicator of market sentiment derived from active fund managers at institutional investment firms. IMI is designed to provide insights into what&rsquo;s driving markets as well as forward-looking investment appetite and risk outlook for U.S. equities. The monthly survey asks respondents for their subjective view on a range of topics over the next 30 days including:</p>
+
+<ul>
+	<li>Market performance and key drivers</li>
+	<li>Upside and downside risks</li>
+	<li>Sector outlooks and preferences</li>
+	<li>Current risk appetite</li>
+	<li>Return expectations</li>
+	<li>Forces driving valuations</li>
+	<li>Topical questions based on current developments and market-moving news</li>
+</ul>
+
+<p>In return for answering the survey S&amp;P Global grants participants free access to the report which is usually $100. If you would like to contribute and get access you can sign up here: <a href="https://www.spglobal.com/marketintelligence/en/mi/Info/0920/imi-survey-request.htmlThe">https://www.spglobal.com/marketintelligence/en/mi/Info/0920/imi-survey-request.htmlThe</a></p>
+
+<h3>This Month&#39;s Survey</h3>
+
+<p><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/0.png" /><br />
+This month was the first time that I investigated the report in detail and the bearish readings caught my attention. The 9-page report has a nice layout and gets you excited about how institutional asset managers view the prospects of the US equity market. For investors it can be helpful to know how the big money is positioned and even better if there was some indicator how this money will be positioned next months. Eyeballing over the report I wondered if such a sentiment survey can be&nbsp; this leading indicator and help with our way to superior returns.</p>
+
+<p>In the middle of the report you can find this graph depicting the investor preferences for each sector for the subsequent 30 days. At first glance it looks a bit cluttered, but after a closer look I found it really interesting.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</p>
+
+<p><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/1.png" style="height:442px; width:670px" />&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; What you can see here is that investors are most positve (1) on healthcare and the most negative (11) on real estate in April 2023. The MTD-Performance of the two sectors and the S&amp;P 500 look like this:<br />
+<img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/2.png" style="height:259px; width:782px" /></p>
+
+<p>Healthcare is up 2.24% since end of March wheras the real estate sector (-0.2%) and the S&amp;P 500 (0.74%) hoovered around the zero line. The spread between the Healthcare and Real Estate sector is 2.44% which on an annualized basis would be an alpha of more than 33%.</p>
+
+<p>But, wait...I recall the respondents are allowed to submit the survey by the 10th of a month - so let&#39;s have a look at the correct time frame.</p>
+
+<p><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/3.png" style="height:261px; width:781px" /></p>
+
+<p>This does not look so rosy anymore. The Healthcare sector clearly had the biggest gains in the first trading days of April is now lagging with a negative performance relative to Real Estate and the S&amp;P 500 Index if we use April, 10th as the starting date. Just from the two charts alone one could get the impression that sentiment surveys are a mere representation of the past. Maybe even some kind of momentum in a different shell. Let&#39;s find out and do a proper analysis if the survey is even worth reading (or participating in).</p>
+
+<h3>Analyzing the Ranking of sectors by investor preference</h3>
+
+<p>The time series of this relative sector performance goes back until the initiation of <em>S&amp;P Global&#39;s </em><em>Investment Manager Index </em>in October 2020 and is an ideal subset to analyze the value of such a sentiment survey.<br />
+We will take the following SPDR sector ETFs as proxies:</p>
+
+<p>&bull; Communications services = XLC<br />
+&bull; Consumer Staples = XLP<br />
+&bull; Healthcare = XLV<br />
+&bull; RE = XLRE<br />
+&bull; Basic Materials = XLB<br />
+&bull; Energy = XLE<br />
+&bull; Industrials = XLI<br />
+&bull; Utilities = XLU<br />
+&bull; Consumer discretionary = XLY<br />
+&bull; Financials = XLF<br />
+&bull; IT = XLK</p>
+
+<p>I will only show some code snippets in this article, but for everyone interested you can check out the Google Colab Notebook <a href="https://colab.research.google.com/drive/1sVPvk5mWhNqlVfevb0rgM-LGxKF1Z9Am?usp=sharing">here</a>. The excel file with sector rankings can be downloaded <a href="https://docs.google.com/spreadsheets/d/1fPQmAH6z3JNbtuQogSgN4-IaAxp0iHhc/edit?usp=sharing&amp;ouid=106213691368926529660&amp;rtpof=true&amp;sd=true">here</a> - make sure to upload it in the Google Colab Notebook to replicate the results.</p>
+
+<h4>We will start with importing the necessary python modules</h4>
+
+<pre>
+<code class="language-python">import yfinance as yf
+import pandas as pd
+import numpy as np
+import datetime
+import seaborn as sns
+</code></pre>
+
+<h4>Continue with creating a sector mapping to the SPDR ETFS</h4>
+
+<pre>
+<code class="language-python">sector_mapping = {"Communications Services":"XLC", "Consumer Staples": "XLP", "Healthcare":"XLV", "Real Estate":"XLRE", "Basic Materials":"XLB",
+                  "Energy":"XLE", "Industrials":"XLI", "Utilities":"XLU", "Consumer Discretionary": "XLY", "Financials": "XLF", "IT": "XLK"}
+
+# Invert the sector_mapping dictionary
+inverse_sector_mapping = {v: k for k, v in sector_mapping.items()}
+</code></pre>
+
+<h4>Download Historical Prices</h4>
+
+<pre>
+<code class="language-python">df = yf.download('XLC XLP XLV XLRE XLB XLE XLI XLU XLY XLF XLK', start="2022-01-01", end="2023-04-27")["Adj Close"]
+df.rename(columns=inverse_sector_mapping, inplace=True)
+</code></pre>
+
+<h4>Importing the sector rankings by investor preference data</h4>
+
+<pre>
+<code class="language-python">imi = pd.read_excel("imi_sector_expectations.xlsx",index_col=0)
+imi.index = pd.to_datetime(imi.index, format = '%Y/%m/%d').strftime('%Y-%m')
+
+imi = imi[imi.index &gt;= "2022-01"]
+</code></pre>
+
+<p>Note that I am slicing the data in the code above and will only analyze the performance starting from January 2022. Feel free to amend the code and do the analyze on the whole dataset.</p>
+
+<h4>Let&#39;s have a look at the data<br />
+<img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/4.png" style="height:533px; width:479px" /></h4>
+
+<h4>Let&#39;s find the first trading days subsequent to each month&#39;s survey submission period</h4>
+
+<pre>
+<code class="language-python"># Filter rows where the day is the 10th or lower if the 10th was not a trading day
+survey_submission_period = df[df.index.day &gt; 10]
+
+# Group by month and find the last day of each group
+first_days_after_submission = survey_submission_period.groupby(survey_submission_period.index.to_period('M')).apply(lambda x: x.iloc[0])
+
+# Reset the index and set the index back to the original 'Date' column
+first_days_after_submission.reset_index(drop=True, inplace=True)
+first_days_after_submission.set_index(survey_submission_period.groupby(survey_submission_period.index.to_period('M')).apply(lambda x: x.index[0]), inplace=True)
+first_days = first_days_after_submission.index.to_list()
+</code></pre>
+
+<h4>L/S Factor Approach</h4>
+
+<p>In order to evaluate whether or not the survey results are added value for a tactical asset allocation we can approach the analysis in different ways. We could start with individual weights for each sector and then penalize these weights for a higher (worse) sector rank, thereby effectively going overweight the preferred sectors and underweight the least preferred sectors. Or simply conduct the analysis in a long/short manner extracting the alpha between the preferred and least preferred. Since we are not creating a trading strategy or portfolio around this, the long/short analysis is a good starting point.<br />
+We will go long sectors 1-5 and short sectors 7-11, leaving sector ranking 6 neutral. The difference between the two is the alpha.</p>
+
+<pre>
+<code class="language-python"># Define new DataFrame with index values and column names of DataFrame "imi"
+ls = pd.DataFrame(index=imi.index, columns=imi.columns)
+# set values to np.NaN
+ls[:] = np.NaN
+# iterate over the rows and calculate the portfolio performance of the L/S portfolio
+
+for i in range(len(first_days)):
+    start_date = first_days[i]
+  
+    if i == len(first_days) - 1:
+        end_date = df.index[-1]
+    else:
+        end_date = first_days[i + 1]
+    
+    # Filter rows of 'df' based on the date range
+    date_range_df = df[(df.index &gt;= start_date) &amp; (df.index &lt; end_date)]
+
+    # Calculate the average returns for the best and worst 5 sectors
+    long_sectors = imi.iloc[i].nsmallest(5).index
+    short_sectors = imi.iloc[i].nlargest(5).index
+
+    for sector in long_sectors:
+        ls.loc[ls.index[i], sector] = (date_range_df[sector].iloc[-1] / date_range_df[sector].iloc[0]) - 1
+
+    for sector in short_sectors:
+        ls.loc[ls.index[i], sector] = (date_range_df[sector].iloc[-1] / date_range_df[sector].iloc[0]) - 1
+
+    long_returns = np.mean((date_range_df[long_sectors].iloc[-1] / date_range_df[long_sectors].iloc[0]) -1)
+    short_returns = np.mean((date_range_df[short_sectors].iloc[-1] / date_range_df[short_sectors].iloc[0]) -1)
+
+    ls.loc[ls.index[i],"LS_Return"] = long_returns - short_returns
+</code></pre>
+
+<h3>The Results</h3>
+
+<p><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/5.png" style="height:418px; width:772px" /></p>
+
+<p>We can see on the chart that the expectations were quite good in the beginning of the year 2022, but when the equity markets recovered in June the investment professionals answering the IMI survey were slow to adapt and overweighted Energy, Basic Materials and Healthcare and missed out on the recovery.</p>
+
+<p>The individual months&#39; long/short returns are</p>
+
+<p><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/6.png" /><img src="/static/blog/how-useful-are-sentiment-surveys-for-tactical-asset-allocation/7.png" /></p>
+
+<h3>Conclusion</h3>
+
+<p>In the period of analysis the sector ranking by investor preferences of the <em>S&amp;P Global </em><em>Investment Manager Index </em>would have been helpful for a tactical asset allocation. The cumulative alpha for the year 2022 was above 13% and investors using the IMI results had the chance to strongly outperform the S&amp;P 500 index. However, the analysis discovers that during short term market regime shifts the strategy to over/underweight an investmentportfolio based on sentiment can lead to a large drawdown and investors are not advised to forego the diversification potential as is the case in the long/short approach.</p>
+
+<p>&nbsp;</p>

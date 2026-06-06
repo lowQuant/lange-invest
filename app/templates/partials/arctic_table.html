@@ -1,0 +1,26 @@
+{# Read-only paginated data table fragment. #}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <span class="label-mono">{{ '{:,}'.format(total) }} rows</span>
+    {% if pages > 1 %}<span class="label-mono">page {{ page }} / {{ pages }}</span>{% endif %}
+</div>
+<div class="table-container">
+    <table class="table table-sm">
+        <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>{% for cell in row %}<td{% if not loop.first and cell is number %} class="col-num"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if pages > 1 %}
+<nav class="d-flex justify-content-between align-items-center mt-2">
+    <button class="btn btn-sm btn-outline-secondary {% if page <= 1 %}disabled{% endif %}"
+            hx-get="/arcticdb/api/table/{{ library }}/{{ symbol }}?page={{ page - 1 }}"
+            hx-target="#ac-table" hx-swap="innerHTML"><i class="bi bi-chevron-left"></i> Prev</button>
+    <span class="label-mono">rows {{ (page - 1) * page_size + 1 }}–{{ (page - 1) * page_size + (rows | length) }}</span>
+    <button class="btn btn-sm btn-outline-secondary {% if page >= pages %}disabled{% endif %}"
+            hx-get="/arcticdb/api/table/{{ library }}/{{ symbol }}?page={{ page + 1 }}"
+            hx-target="#ac-table" hx-swap="innerHTML">Next <i class="bi bi-chevron-right"></i></button>
+</nav>
+{% endif %}

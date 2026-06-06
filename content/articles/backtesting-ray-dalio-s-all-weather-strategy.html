@@ -1,0 +1,175 @@
+---
+title: Backtesting Ray Dalio's All Weather Strategy
+date: 2023-02-28
+summary: A backtest of the popular All Weather investment strategy of Ray Dalio
+tags: Ray Dalio, python, strategy, backtesting, long-term investing
+category: Investing
+format: html
+---
+<p>The All Weather Strategy is a popular investment strategy developed by Ray Dalio, the founder of Bridgewater Associates. The strategy is designed to perform well in all economic conditions and is a popular choice for long-term investors. The strategy is based on the premise that asset prices move in response to changes in economic conditions and can be classified into four main categories: inflation, deflation, rising economic growth, and falling economic growth. By investing in assets that perform well in each of these conditions, the strategy aims to provide a stable return with reduced volatility.<br />
+While Bridgewater Associates manages their hedge funds using leverage and the asset allocations change based on market dynamics Ray Dalio revealed a static portfolio allocation that could be used for retail investors in an interview with the coach and author Tony Robbins. The interview is printed in his book &quot;Money&quot;. While being pressured to give an opinion on a static asset allocation Ray Dalio mentioned that he would probably hold 30% stocks, 15% short to mid-term bonds, 40% long-term bonds, 7,5% commodities and 7,5% gold as the most diversified portfolio.<br />
+<br />
+For those who do not rely on the performance backtest of Robbins and his team - or for those that are interested in a general framework - I will show you how to backtest a buy &amp; hold strategy like this.<br />
+<br />
+The rules:<br />
+&bull; we will start with the static asset allocation of 30% SPY as a proxy for bonds, 15% IEF (7-10yr bonds), 40% TLT (20+yr bonds), 7.5% DBC (commodity basket) and 7.5% GLD (gold)<br />
+&bull;we will use a calender-based rebalancing method (every 6 months). Feel free to optimize this for your needs. Actually in my tax jurisdiction investors can realize profits tax-free after a holding period of 6 months which is why I chose two rebalance twice a year. This is in line with Ray Dalio as he advises to rebalance 1-2 times per year.</p>
+
+<h3 style="color:#aaaaaa; font-style:italic"><span style="color:#000000">The Code</span></h3>
+
+<p>First, the necessary packages are imported, including pandas, numpy, yfinance, and matplotlib. The variables &quot;ASSETS&quot; and &quot;WEIGHTS&quot; are defined, which specify the assets and weights for the strategy.</p>
+
+<pre>
+<code class="language-python">import pandas as pd
+from pandas.tseries.offsets import BQuarterEnd,BMonthEnd
+import numpy as np
+import yfinance as yf
+import matplotlib.pyplot as plt
+
+# GLOBALS
+ASSETS = ['SPY','IEF','TLT','DBC','GLD']
+WEIGHTS = [0.3,0.15,0.4,0.075,0.075]</code></pre>
+
+<p>Next, the yfinance package is used to download the historical data for the selected assets. The data is downloaded from 2008-01-01 to 2021-12-30 and only the &quot;Adj Close&quot; price is used.</p>
+
+<pre>
+<code class="language-python">data = yf.download("SPY DBC TLT IEF GLD",start="2008-01-01",end="2021-12-30")
+df = pd.DataFrame(data['Adj Close'])
+</code></pre>
+
+<p>After downloading the data, the rebalancing days are calculated. I chose to rebalance the portfolio at the end of May and November. This is accomplished by creating a list of rebalancing days and adding them to the DataFrame as a new column called &quot;Rebalancing_Days&quot;.</p>
+
+<pre>
+<code class="language-python"># Add month end for rebalancing
+rebals = []
+for idx in df[df.index.month == 5].index.date:
+    rebals.append(BMonthEnd().rollforward(idx))
+
+for idx in df[df.index.month == 11].index.date:
+    rebals.append(BMonthEnd().rollforward(idx))
+ 
+for i, rebal_date in enumerate(rebals):
+    while rebal_date not in df.index:
+        rebal_date += pd.offsets.BDay()
+    rebals[i] = rebal_date
+ 
+df['Rebalancing_Days'] = np.where(df.index.isin(np.unique(rebals)),1,0)</code></pre>
+
+<p>Notice the last line: A value of 1 is assigned to each row that corresponds to a rebalancing day, while all other rows are assigned a value of 0.</p>
+
+<p>We calculate the returns for each asset with:</p>
+
+<pre>
+<code class="language-python">for asset in ASSETS:
+    df[asset+'_ret'] = df[asset].pct_change()
+</code></pre>
+
+<div>
+<div>Now lets define a function that is calculating the net asset value contribution for each asset on each day.</div>
+</div>
+
+<pre>
+<code class="language-python">def calculate_nav_contribution(df, assets, weights):
+    # Create empty columns to store NAV Contribution for each asset  
+    for asset in assets:
+        df[asset+'_NAV_CTR'] = np.nan
+
+    # Create an empty NAV column
+    df["NAV"] = np.nan
+
+    # Initialize CTR for each asset to their respective weight on first day
+    df.loc[df.index[0], [col for col in df.columns if '_NAV_CTR' in col]] = weights
+
+    # Set NAV in the first row to the sum of the asset weights
+    df.at[df.index[0], "NAV"] = (df[[col for col in df.columns if '_NAV_CTR' in col]]).sum(axis=1)[0]
+
+
+    for i in range(len(df))[1:]:
+        if df.loc[df.index[i-1],'Rebalancing_Days'] == 1:
+            for asset in assets:
+                df.at[df.index[i], asset+"_NAV_CTR"] = df.loc[df.index[i-1], 'NAV'] * df.loc[df.index[0], asset+'_NAV_CTR'] * ( 1 + df.loc[df.index[i], asset+'_ret'] )
+        else:
+            for asset in assets:
+                df.at[df.index[i], asset+"_NAV_CTR"] = df.loc[df.index[i-1], asset+'_NAV_CTR']* ( 1 + df.loc[df.index[i],asset+'_ret'])
+
+        # Calculate the NAV with the returns in row i
+        df.at[df.index[i], "NAV"] = (df[[col for col in df.columns if '_NAV_CTR' in col]]).sum(axis=1)[i]
+
+    return df
+</code></pre>
+
+<p>It looks complicated at first, but once you get the gist it&#39;s not too hard to work with and you can easily amend the function for your needs, the specific portfolio composition or rebalancing method you would like to test. Let me try to explain the logic:</p>
+
+<p>The function takes the dataframe with our asset returns along with the respective assets and their weights as inputs</p>
+
+<p>At first we are creating a new column for each asset that will later store the NAV contributions. For example, for SPY we will create the column &quot;SPY_NAV_CTR&quot; and set all values to NaN (not a number) values.</p>
+
+<p>We need a column &quot;NAV&quot; (net asset value or portfolio equity) to see the overall performance, but will set the values to NaN in the beginning.<br />
+<br />
+With the expression &quot;df.loc[index, column] = weight&quot; we can set the intial weight in the first row (at index level 0). To set the weights for all assets at once we can make use of a technique called &quot;list comprehension&quot; and set the list equal to the list containing our asset allocation weightings (asset weights and columns have to be in the same order!).</p>
+
+<pre>
+<code class="language-python">[col for col in df.columns if '_NAV_CTR' in col]
+
+# Creates a list equal to:
+["SPY_NAV_CTR","IEF_NAV_CTR","TLT_NAV_CTR","DBC_NAV_CTR","GLD_NAV_CTR"]</code>
+</pre>
+
+<p>The NAV of the first row is then calculated by taking the sum of all columns containing &quot;_NAV_CTR&quot; in the column name and the first value of this scalar.</p>
+
+<p>In the for-loop we are iterating over the rows of the pandas DataFrame starting from the second row until the end. In this loop we are checking if the previous day was a rebalancing day. If the previous day was a rebalancing day, we are iterating over all assets and calculating the rebalanced NAV otherwise we are just calculating the new assets contribution to the NAV taking the assets return for that day into account. Finally, we are calculating the NAV by taking the sum across our asset&#39;s NAV_CTR columns again as we did previously for the first row. Note, this time we have to reference &quot;i&quot; instead of &quot;0&quot; inside the brackets to get the sum on the respective row.</p>
+
+<p>Now we can run this function like this</p>
+
+<pre>
+<code class="language-python">df = calculate_nav_contribution(df, ASSETS, WEIGHTS)</code>
+</pre>
+
+<p>and plot the equity curve of the stratey with panda&#39;s built-in function plot:</p>
+
+<pre>
+<code class="language-python">df["NAV"].plot(kind='line',figsize=(15,7))</code>
+</pre>
+
+<p><img src="/static/blog/backtesting-ray-dalio-s-all-weather-strategy/0.png" style="height:380px; width:841px" /></p>
+
+<p>Finally we can compute some return metrics like this:</p>
+
+<pre>
+<code class="language-python"># Calculate cumulative returns
+cumulative_returns = (df["NAV"][-1] / df["NAV"][0]) - 1
+
+# Calculate annual return
+num_days = (df.index[-1] - df.index[0]).days
+annual_return = (1 + cumulative_returns) ** (252 / num_days) - 1
+
+# Calculate daily standard deviation
+daily_std = np.std(df["NAV"].pct_change())
+
+# Calculate annual standard deviation
+annual_std = daily_std * np.sqrt(252)
+
+# Calculate drawdowns
+cumulative_returns = df["NAV"] / df["NAV"].iloc[0]
+peaks = cumulative_returns.cummax()
+drawdowns = (cumulative_returns - peaks) / peaks
+
+# Calculate maximum drawdown
+max_drawdown = drawdowns.min()
+
+print("Annual return: {:.2%}".format(annual_return))
+print("Annual standard deviation: {:.2%}".format(annual_std))
+print("Sharpe Ratio: {:.2}".format(annual_return/annual_std))
+print("Max drawdown: {:.2%}".format(max_drawdown))</code>
+</pre>
+
+<div style="background:#eeeeee; border:1px solid #cccccc; padding:5px 10px">Annual return: 4.90%<br />
+Annual standard deviation: 7.59%<br />
+Sharpe Ratio: 0.65<br />
+Max drawdown: -13.82%</div>
+
+<p>&nbsp;</p>
+
+<p>That&#39;s it.</p>
+
+<p>Feel free to use this framework for your static asset allocations or use it - with only a few changes for backtesting a dynamic asset allocation based on some indicators.</p>

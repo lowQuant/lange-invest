@@ -330,6 +330,9 @@ td.col-num, th.col-num { text-align: right; }
     position: sticky; top: 52px; height: calc(100vh - 52px); overflow-y: auto;
 }
 .app-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* Push the footer to the very bottom even on short pages. */
+.app-content > .qt-shell { flex: 1 0 auto; }
+.app-content > .qt-footer { flex-shrink: 0; }
 
 .side-nav { display: flex; flex-direction: column; gap: 1.1rem; }
 .side-group { display: flex; flex-direction: column; gap: 0.1rem; }

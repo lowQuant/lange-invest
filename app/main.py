@@ -70,9 +70,22 @@ app.mount("/admin", build_admin_app())
 # ── Routers ──
 # Auth + gated fragments register BEFORE the public catch-all `/{ac_slug}`,
 # which is greedy and must stay LAST.
-from app.routes import auth_routes, gated, mcp, public  # noqa: E402
+from app.routes import auth_routes, database, gated, mcp, public  # noqa: E402
 
 app.include_router(auth_routes.router)
 app.include_router(gated.router)
 app.include_router(mcp.router)
+app.include_router(database.router)
 app.include_router(public.router)
+
+
+@app.on_event("startup")
+async def _connect_engine():
+    # Best-effort: connect ArcticDB for the live Database tab. App still boots
+    # (snapshot-only) if no connection is configured.
+    try:
+        from app.engine import ensure_connected
+
+        ensure_connected()
+    except Exception:  # noqa: BLE001
+        pass

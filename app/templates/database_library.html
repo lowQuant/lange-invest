@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ db.label }} — Database — {{ site.name }}{% endblock %}
+
+{% block content %}
+<nav class="breadcrumb mb-3"><a href="/database">Database</a> <span class="mx-2 divider-dot">/</span> {{ db.label }}</nav>
+
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi bi-table"></i> Library · {{ db.name }}</span>
+        <h1>{{ db.label }}</h1>
+        <p class="lead">{{ db.description }}</p>
+    </div>
+    {% if symbols %}<span class="label-mono">{{ symbols | length }} symbols</span>{% endif %}
+</div>
+
+{% if error %}
+    <div class="alert alert-info">{{ error }}</div>
+{% elif symbols %}
+    <div class="qt-grid cols-3">
+        {% for sym in symbols %}
+        <a class="qt-tile" href="/database/{{ db.name }}/{{ sym }}" style="padding:0.75rem 0.875rem;">
+            <span class="qt-tile-title" style="font-family:var(--mono); font-size:0.95rem;">
+                <i class="bi bi-graph-up" style="color:var(--accent);"></i> {{ sym }}
+            </span>
+        </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-info">No symbols in this library yet.</div>
+{% endif %}
+{% endblock %}

@@ -44,6 +44,14 @@ class AssetClass:
 
 
 @dataclass(frozen=True)
+class DatabaseLibrary:
+    name: str
+    label: str
+    description: str
+    chart: bool
+
+
+@dataclass(frozen=True)
 class SiteConfig:
     name: str
     tagline: str
@@ -51,9 +59,13 @@ class SiteConfig:
     public_libraries: tuple[str, ...]
     protected_libraries: tuple[str, ...]
     asset_classes: tuple[AssetClass, ...]
+    database_libraries: tuple[DatabaseLibrary, ...]
 
     def asset_class(self, slug: str) -> AssetClass | None:
         return next((a for a in self.asset_classes if a.slug == slug), None)
+
+    def database_library(self, name: str) -> DatabaseLibrary | None:
+        return next((d for d in self.database_libraries if d.name == name), None)
 
 
 def _load() -> SiteConfig:
@@ -86,6 +98,16 @@ def _load() -> SiteConfig:
             )
         )
 
+    database_libraries = tuple(
+        DatabaseLibrary(
+            name=d["name"],
+            label=d.get("label", d["name"]),
+            description=d.get("description", ""),
+            chart=bool(d.get("chart", False)),
+        )
+        for d in raw.get("database_library", [])
+    )
+
     return SiteConfig(
         name=site.get("name", "lange-invest"),
         tagline=site.get("tagline", ""),
@@ -93,6 +115,7 @@ def _load() -> SiteConfig:
         public_libraries=tuple(access.get("public_libraries", [])),
         protected_libraries=tuple(access.get("protected_libraries", [])),
         asset_classes=tuple(asset_classes),
+        database_libraries=database_libraries,
     )
 
 

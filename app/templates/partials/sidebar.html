@@ -1,0 +1,22 @@
+{# Left section navigation. `nav_active` marks the current section. #}
+<aside class="app-sidebar">
+    <nav class="side-nav">
+        <div class="side-group">
+            <span class="side-group-label">Research</span>
+            <a class="side-link {% if nav_active == 'articles' %}active{% endif %}" href="/articles"><i class="bi bi-journal-text"></i> Articles</a>
+        </div>
+        <div class="side-group">
+            <span class="side-group-label">Strategies</span>
+            <a class="side-link {% if nav_active == 'equities' %}active{% endif %}" href="/equities"><i class="bi bi-bar-chart-line"></i> Equities</a>
+            <a class="side-link {% if nav_active == 'futures' %}active{% endif %}" href="/futures"><i class="bi bi-graph-up-arrow"></i> Futures</a>
+        </div>
+        <div class="side-group">
+            <span class="side-group-label">Portfolio</span>
+            <a class="side-link {% if nav_active == 'portfolio' %}active{% endif %}" href="/portfolio"><i class="bi bi-pie-chart"></i> Portfolio</a>
+        </div>
+        <div class="side-group">
+            <span class="side-group-label">Data</span>
+            <a class="side-link {% if nav_active == 'database' %}active{% endif %}" href="/database"><i class="bi bi-database"></i> Database</a>
+        </div>
+    </nav>
+</aside>

@@ -28,7 +28,24 @@ public_libraries = [
     "futures_stats",
     "universe",
     "model_portfolio",
+    # Public Database browser (open to anyone), read-only:
+    "futures",
+    "market_data",
 ]
+
+# Libraries surfaced in the public "Database" tab (open to anyone, read-only).
+# Must also appear in public_libraries above so public_access permits them.
+[[database_library]]
+name = "futures"
+label = "Futures"
+description = "Continuously-rolled futures across the liquid global complex. Charting enabled."
+chart = true
+
+[[database_library]]
+name = "market_data"
+label = "Stocks"
+description = "Daily OHLCV market data for the US equity universe. Charting enabled."
+chart = true
 
 # Libraries that are explicitly protected. Even with an admin MCP token, the
 # server refuses destructive ops against these unless an override env flag is

@@ -31,13 +31,18 @@
     <script src="https://unpkg.com/htmx.org@2.0.4"></script>
 </head>
 <body>
-    {% include "partials/nav.html" %}
-
-    <main class="qt-shell {% block shell_class %}{% endblock %}">
-        {% block content %}{% endblock %}
-    </main>
-
-    {% include "partials/footer.html" %}
+    <div class="app-shell">
+        {% include "partials/topbar.html" %}
+        <div class="app-body">
+            {% include "partials/sidebar.html" %}
+            <div class="app-content">
+                <main class="qt-shell {% block shell_class %}{% endblock %}">
+                    {% block content %}{% endblock %}
+                </main>
+                {% include "partials/footer.html" %}
+            </div>
+        </div>
+    </div>
 
     <div class="toast-container position-fixed bottom-0 end-0 p-3" id="toast-container"></div>
 

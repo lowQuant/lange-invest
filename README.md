@@ -6,6 +6,7 @@ one domain, all funnelling through one read path to ArcticDB:
 | Surface | Path | Auth | Data |
 |---------|------|------|------|
 | **Public** | `/`, `/articles`, `/equities`, `/futures`, `/portfolio` | none | precomputed JSON snapshots + markdown |
+| **Database** | `/database` | none | live, read-only browse of `futures` + `market_data` (allowlisted) with charting |
 | **Gated** | `/gated/...` HTMX fragments | login + TOTP 2FA + entitlement | live signals (allowlisted) / real portfolio (private) |
 | **Admin** | `/admin` | admin role | the mounted [arcticdb-viewer](https://github.com/lowQuant/arcticdb-viewer) (full CRUD) |
 | **MCP** | `POST /mcp` | scoped bearer token | `read` (allowlisted) / `admin` (full CRUD) |
@@ -58,6 +59,10 @@ cp .env.example .env                 # fill in S3 + secrets (never commit)
 # Dev data so the public site renders without S3:
 python scripts/gen_sample_data.py    # synthetic snapshots
 python scripts/ingest_ibkr.py --sample   # synthetic private portfolio
+
+# Local data engine for the public Database tab (futures + market_data):
+export LANGE_DB_URI=lmdb:///tmp/lange_db
+python scripts/seed_local_db.py      # sample OHLCV; omit in prod (use S3 env)
 
 # For local HTTP dev only (cookies/MCP are TLS-only by default):
 export COOKIE_SECURE=0 MCP_ALLOW_INSECURE=1 SESSION_SECRET=dev

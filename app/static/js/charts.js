@@ -65,6 +65,57 @@
             padding: 8, cornerRadius: 4,
         };
 
+        // ── Candlestick (OHLC) ──
+        if (type === "candlestick") {
+            const ohlc = chartData.datasets[0].data;
+            const upC = "#22c55e", downC = "#ef4444", upBg = "#22c55e88", downBg = "#ef444488";
+            const plugin = {
+                id: "candlestick",
+                afterDatasetsDraw(ch) {
+                    const { ctx: cx, scales: { x: sx, y: sy } } = ch;
+                    const bw = Math.max(2, (sx.width / ohlc.length) * 0.6);
+                    ohlc.forEach((d, i) => {
+                        if (!d || d.o == null) return;
+                        const px = ch.getDatasetMeta(0).data[i].x;
+                        const up = d.c >= d.o;
+                        cx.beginPath(); cx.strokeStyle = up ? upC : downC; cx.lineWidth = Math.max(1, bw * 0.1);
+                        cx.moveTo(px, sy.getPixelForValue(d.h)); cx.lineTo(px, sy.getPixelForValue(d.l)); cx.stroke();
+                        const top = sy.getPixelForValue(Math.max(d.o, d.c));
+                        const bot = sy.getPixelForValue(Math.min(d.o, d.c));
+                        cx.fillStyle = up ? upBg : downBg; cx.strokeStyle = up ? upC : downC; cx.lineWidth = 1;
+                        cx.fillRect(px - bw / 2, top, bw, Math.max(1, bot - top));
+                        cx.strokeRect(px - bw / 2, top, bw, Math.max(1, bot - top));
+                    });
+                },
+            };
+            const lo = Math.min(...ohlc.filter(d => d).map(d => d.l));
+            const hi = Math.max(...ohlc.filter(d => d).map(d => d.h));
+            const chart = new Chart(ctx, {
+                type: "scatter",
+                data: { labels: chartData.x_values, datasets: [{ data: ohlc.map((d, i) => ({ x: i, y: d ? d.c : null })), pointRadius: 0, pointHitRadius: 10 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    scales: {
+                        x: { ...baseAxisStyle, type: "linear", min: -0.5, max: ohlc.length - 0.5,
+                             title: { ...baseAxisStyle.title, display: isMain && !!chartData.x_label, text: chartData.x_label },
+                             ticks: { ...baseAxisStyle.ticks, maxTicksLimit: maxTicks,
+                                      callback: (v) => { const i = Math.round(v); return (i >= 0 && i < chartData.x_values.length) ? chartData.x_values[i] : ''; } } },
+                        y: { ...baseAxisStyle, min: lo * 0.998, max: hi * 1.002 },
+                    },
+                    plugins: {
+                        legend: { display: false }, zoom: zoomConfig,
+                        tooltip: { ...tooltipStyle, callbacks: {
+                            title: (it) => chartData.x_values[Math.round(it[0].parsed.x)] || '',
+                            label: (c2) => { const d = ohlc[Math.round(c2.parsed.x)]; return d ? [`O ${d.o}`, `H ${d.h}`, `L ${d.l}`, `C ${d.c}`] : ''; } } },
+                    },
+                },
+                plugins: [plugin],
+            });
+            if (!global._langeCharts) global._langeCharts = [];
+            global._langeCharts.push(chart);
+            return chart;
+        }
+
         let datasetIdx = 0, studyIdx = 0;
         const datasets = (chartData.datasets || []).map((ds) => {
             if (ds.is_study === true) {

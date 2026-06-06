@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from app.config import get_config  # noqa: E402
-from app.users import _load_raw, upsert_user  # noqa: E402
+from app.users import _load_raw, delete_user, upsert_user  # noqa: E402
 
 
 def main() -> None:
@@ -38,6 +38,9 @@ def main() -> None:
 
     secret = sub.add_parser("secret", help="Show a user's TOTP secret + otpauth URI (to enroll in an app).")
     secret.add_argument("--username", required=True)
+
+    rm = sub.add_parser("remove", help="Delete a user.")
+    rm.add_argument("--username", required=True)
 
     args = ap.parse_args()
 
@@ -58,6 +61,12 @@ def main() -> None:
         t = pyotp.TOTP(u["totp_secret"])
         print(f"\n  Current 6-digit code for {args.username!r}:  {t.now()}")
         print(f"  (valid for ~{30 - int(__import__('time').time()) % 30}s — type it at /login)\n")
+        return
+
+    if args.cmd == "remove":
+        _find(args.username)  # 404s with a friendly message if missing
+        delete_user(args.username)
+        print(f"Deleted user {args.username!r}.")
         return
 
     if args.cmd == "secret":

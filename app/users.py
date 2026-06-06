@@ -88,3 +88,12 @@ def upsert_user(username: str, password: str, role: str, entitlements: list[str]
     data["users"] = users
     _save_raw(data)
     return totp_secret
+
+
+def delete_user(username: str) -> bool:
+    """Remove a user. Returns True if a user was removed."""
+    data = _load_raw()
+    before = len(data.get("users", []))
+    data["users"] = [u for u in data.get("users", []) if u.get("username") != username]
+    _save_raw(data)
+    return len(data["users"]) < before

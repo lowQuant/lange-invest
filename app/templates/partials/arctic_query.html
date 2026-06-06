@@ -1,0 +1,28 @@
+{# Query builder panel (ported from arcticdb-viewer). Applies to #ac-table. #}
+<div class="qt-panel mb-3" id="query-panel" style="display:none;">
+    <div class="qt-panel-head">
+        <span class="qt-panel-head-title"><i class="bi bi-funnel"></i> Query pipeline</span>
+        <div class="d-flex gap-1">
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Add step</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li class="px-2 py-1 eyebrow">Operations</li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('filter');return false"><i class="bi bi-funnel"></i> Filter rows</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('deduplicate');return false"><i class="bi bi-list-check"></i> Unique / Deduplicate</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('group_by');return false"><i class="bi bi-collection"></i> Group &amp; Aggregate</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('sort');return false"><i class="bi bi-sort-alpha-down"></i> Sort</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('limit');return false"><i class="bi bi-text-paragraph"></i> Limit</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addOp('columns');return false"><i class="bi bi-layout-three-columns"></i> Select columns</a></li>
+                </ul>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="executeQuery()"><i class="bi bi-play-fill"></i> Apply</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearQuery()">Clear</button>
+        </div>
+    </div>
+    <div class="qt-panel-body dense" id="query-ops"></div>
+    <div id="query-empty" class="px-3 pb-2 label-mono" style="color:var(--ink-4);">No steps. Use <span class="mono" style="color:var(--ink-1);">Add step</span> to filter, sort, group, limit, or pick columns. Values: <code>10^6</code>, <code>2.5e3</code>, between <code>100,500</code>, dates <code>2025-01-01,2025-06-30</code>.</div>
+</div>
+<style>
+    #query-ops .op-row { display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; background:var(--bg-2); border:1px solid var(--line-2); border-radius:4px; padding:.4rem .55rem; margin-bottom:.35rem; }
+    #query-ops .op-row .badge { flex:0 0 auto; }
+</style>

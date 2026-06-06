@@ -120,17 +120,31 @@ async def api_chart(request: Request, library: str, symbol: str):
 
 
 @router.get("/api/table/{library}/{symbol:path}", response_class=HTMLResponse)
-async def api_table(request: Request, library: str, symbol: str, page: int = 1):
+async def api_table(request: Request, library: str, symbol: str, page: int = 1, query: str = ""):
     if not _allowed(request, library):
         raise HTTPException(status_code=404)
     ensure_connected()
+    from app import arctic_query
+
+    q = arctic_query.parse_query(query)
     try:
-        desc = _describe(request, library, symbol)
-        total = int(desc.get("rows") or 0)
-        pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-        page = max(1, min(page, pages))
-        start = (page - 1) * PAGE_SIZE
-        df = _read(request, library, symbol, row_range=(start, start + PAGE_SIZE))
+        if q:
+            # Queried view: full read, run the pipeline, then paginate the result.
+            full = _read(request, library, symbol)
+            df_all, data_columns = arctic_query.execute_query(full, q)
+            total = len(df_all)
+            pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+            page = max(1, min(page, pages))
+            start = (page - 1) * PAGE_SIZE
+            df = df_all.iloc[start:start + PAGE_SIZE]
+        else:
+            desc = _describe(request, library, symbol)
+            total = int(desc.get("rows") or 0)
+            pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+            page = max(1, min(page, pages))
+            start = (page - 1) * PAGE_SIZE
+            df = _read(request, library, symbol, row_range=(start, start + PAGE_SIZE))
+            data_columns = [str(c) for c in df.columns]
     except public_access.AccessDenied:
         raise HTTPException(status_code=404)
     except Exception as e:  # noqa: BLE001
@@ -139,16 +153,20 @@ async def api_table(request: Request, library: str, symbol: str, page: int = 1):
     is_mi = isinstance(df.index, pd.MultiIndex)
     has_index = is_mi or df.index.name is not None or not isinstance(df.index, pd.RangeIndex)
     index_label = " / ".join(str(n or "") for n in df.index.names) if is_mi else (df.index.name or "index")
-    data_columns = [str(c) for c in df.columns]
     rows = []
-    for i, (idx, row) in enumerate(zip(df.index, df.itertuples(index=False, name=None))):
+    for i, (idx, row) in enumerate(zip(df.index, df[data_columns].itertuples(index=False, name=None))):
         idx_str = " / ".join(str(x) for x in idx) if isinstance(idx, tuple) else str(idx)
         cells = ["" if (v != v) else v for v in row]
         rows.append({"n": start + i, "idx": idx_str, "cells": cells})
+
+    sort = q.get("sort", {}) if q else {}
+    # Editing maps by positional row index; only safe on the raw, unfiltered view.
+    can_edit = _is_admin(request) and not q
     return render(request, "partials/arctic_table.html", library=library, symbol=symbol,
-                  data_columns=data_columns, index_label=index_label, has_index=has_index,
-                  rows=rows, page=page, pages=pages, total=total, page_size=PAGE_SIZE,
-                  can_edit=_is_admin(request))
+                  data_columns=[str(c) for c in data_columns], index_label=index_label,
+                  has_index=has_index, rows=rows, page=page, pages=pages, total=total,
+                  page_size=PAGE_SIZE, can_edit=can_edit, query=query, is_filtered=bool(q),
+                  sort_col=sort.get("col", ""), sort_dir=sort.get("dir", "asc"))
 
 
 @router.get("/api/chart-info/{library}/{symbol:path}", response_class=JSONResponse)

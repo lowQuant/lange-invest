@@ -32,6 +32,7 @@
 <div class="d-flex gap-1 mb-3 flex-wrap">
     <button id="chart-btn" class="btn btn-sm btn-outline-info" onclick="toggleChart()"><i class="bi bi-graph-up"></i> Chart</button>
     <button id="sp-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePane()"><i class="bi bi-layout-sidebar-reverse"></i> Side pane</button>
+    <button id="query-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleQuery()"><i class="bi bi-funnel"></i> Query</button>
     {% if is_admin %}
     <span style="width:1px;background:var(--line-2);margin:0 .25rem;"></span>
     <button class="btn btn-sm btn-outline-success" data-bs-toggle="collapse" data-bs-target="#add-row"><i class="bi bi-plus-lg"></i> Add row</button>
@@ -152,12 +153,33 @@
                 {% endfor %}
             </div>
         </div>
+
+        <div class="ac-toolbar">
+            <span class="ac-lbl">Studies</span>
+            <div id="ac-studies" class="d-flex gap-1 flex-wrap"></div>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> Study</button>
+                <ul class="dropdown-menu">
+                    <li class="px-2 py-1 eyebrow">Moving averages</li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',20);return false">SMA (20)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',50);return false">SMA (50)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('sma',200);return false">SMA (200)</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',12);return false">EMA (12)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',26);return false">EMA (26)</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="addStudy('ema',50);return false">EMA (50)</a></li>
+                </ul>
+            </div>
+        </div>
     </div>
     <div class="qt-panel-body" id="chart-area">
         <div class="text-center py-5"><div class="spinner-border spinner-border-sm"></div> <span class="label-mono ms-2">Loading chart…</span></div>
     </div>
 </div>
 </div>
+
+{# ── Query builder (applies to the data table) ── #}
+{% include "partials/arctic_query.html" %}
 
 {# ── Data table ── #}
 <div class="qt-panel">
@@ -212,7 +234,11 @@
 <script>
 const LIB = {{ library | tojson }}, SYM = {{ symbol | tojson }};
 const IS_MULTI = {{ 'true' if meta and meta.is_multiindex else 'false' }};
+const ALL_COLUMNS = {{ (desc.columns if desc else []) | tojson }};
+const INDEX_NAME = {{ (desc.index.name if desc and desc.index else '') | tojson }};
 const enc = encodeURIComponent;
+let acStudies = [];   // [{type:'sma', period:20}, ...]
+let currentQuery = {};
 
 function isContract() { const s = document.getElementById("ac-source"); return IS_MULTI && (!s || s.value === "contract"); }
 function selY() { return Array.from(document.querySelectorAll(".ac-y:checked")).map(c => c.value); }
@@ -259,7 +285,16 @@ function draw() {
             url += `&y_cols=${enc(y.join(","))}`;
         }
     }
+    if (acStudies.length) url += `&studies=${enc(JSON.stringify(acStudies))}`;
     htmx.ajax("GET", url, "#chart-area");
+}
+
+// ── Studies ──
+function addStudy(type, period) { acStudies.push({ type, period }); renderStudies(); draw(); }
+function rmStudy(i) { acStudies.splice(i, 1); renderStudies(); draw(); }
+function renderStudies() {
+    document.getElementById("ac-studies").innerHTML = acStudies.map((s, i) =>
+        `<span class="badge bg-info">${s.type.toUpperCase()}(${s.period}) <a href="#" onclick="rmStudy(${i});return false" style="color:inherit;text-decoration:none;">×</a></span>`).join("");
 }
 
 let chartReady = false;
@@ -271,6 +306,8 @@ function toggleChart() {
     document.getElementById("chart-btn").classList.toggle("btn-outline-info", !show);
     if (show && !chartReady) { chartReady = true; if (IS_MULTI) onSource(); else { syncY(); draw(); } }
     else if (show) { draw(); }
+    // Force a resize once the panel is laid out (fixes the narrow-on-first-show flash).
+    if (show) setTimeout(() => (window._langeCharts || []).forEach(c => c.resize && c.resize()), 90);
 }
 document.addEventListener("themechange", () => { if (document.getElementById("chart-wrap").style.display !== "none") setTimeout(draw, 50); });
 
@@ -289,6 +326,102 @@ function loadSidePaneDefault() {
         .then(r => { if (r.ok) return r.text(); throw new Error("no metadata"); })
         .then(html => { const el = document.getElementById("sidepane-content"); el.innerHTML = html; htmx.process(el); })
         .catch(() => htmx.ajax("GET", "/arcticdb/api/sidepane/libraries", "#sidepane-content"));
+}
+
+// ── Query builder (applies to #ac-table) ──
+function toggleQuery() {
+    const p = document.getElementById("query-panel");
+    const show = p.style.display === "none";
+    p.style.display = show ? "block" : "none";
+    document.getElementById("query-btn").classList.toggle("btn-secondary", show);
+    document.getElementById("query-btn").classList.toggle("btn-outline-secondary", !show);
+}
+function colOptionsHTML(includeIndex) {
+    let h = "";
+    if (includeIndex && INDEX_NAME) h += `<option value="__index__">${INDEX_NAME} (index)</option>`;
+    else if (includeIndex && IS_MULTI) h += `<option value="__index__">date (index)</option>`;
+    return h + ALL_COLUMNS.map(c => `<option value="${c}">${c}</option>`).join("");
+}
+const OP_TEMPLATES = {
+    filter: () => `<div class="op-row" data-type="filter"><span class="badge bg-primary">filter</span>
+        <select class="form-select form-select-sm op-col" style="width:140px;">${colOptionsHTML(true)}</select>
+        <select class="form-select form-select-sm op-operator" style="width:120px;">
+            <option value="eq">=</option><option value="neq">≠</option><option value="gt">&gt;</option><option value="gte">≥</option>
+            <option value="lt">&lt;</option><option value="lte">≤</option><option value="between">between</option>
+            <option value="contains">contains</option><option value="startswith">starts</option><option value="endswith">ends</option><option value="regex">regex</option>
+        </select>
+        <input class="form-control form-control-sm op-value" placeholder="value (e.g. 10^6)" style="width:170px;">
+        <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>`,
+    deduplicate: () => `<div class="op-row" data-type="deduplicate"><span class="badge bg-success">unique</span>
+        <span class="ac-lbl">keep one per</span>
+        <select class="form-select form-select-sm op-col" style="width:140px;">${colOptionsHTML(true)}</select>
+        <select class="form-select form-select-sm op-keep" style="width:90px;"><option value="last">last</option><option value="first">first</option></select>
+        <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>`,
+    group_by: () => `<div class="op-row" data-type="group_by"><span class="badge bg-warning">group</span>
+        <span class="ac-lbl">by</span><select class="form-select form-select-sm op-col" style="width:140px;">${colOptionsHTML(true)}</select>
+        <span class="ac-lbl">then</span>
+        <select class="form-select form-select-sm op-agg" style="width:120px;">
+            <option value="last">last</option><option value="first">first</option><option value="mean">average</option>
+            <option value="sum">sum</option><option value="count">count</option><option value="min">min</option>
+            <option value="max">max</option><option value="median">median</option><option value="std">std</option></select>
+        <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>`,
+    sort: () => `<div class="op-row" data-type="sort"><span class="badge bg-info">sort</span>
+        <select class="form-select form-select-sm op-col" style="width:140px;">${colOptionsHTML(true)}</select>
+        <select class="form-select form-select-sm op-dir" style="width:120px;"><option value="asc">ascending</option><option value="desc">descending</option></select>
+        <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>`,
+    limit: () => `<div class="op-row" data-type="limit"><span class="badge bg-secondary">limit</span>
+        <select class="form-select form-select-sm op-mode" style="width:90px;"><option value="first">first</option><option value="last">last</option></select>
+        <input type="number" class="form-control form-control-sm op-n" value="100" min="1" style="width:80px;"><span class="ac-lbl">rows</span>
+        <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>`,
+    columns: () => `<div class="op-row" data-type="columns" style="flex-direction:column; align-items:stretch;">
+        <div class="d-flex gap-2 align-items-center mb-1"><span class="badge bg-dark">columns</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllCols(true)">All</button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="toggleAllCols(false)">None</button>
+            <button class="btn btn-sm btn-outline-danger ms-auto" onclick="removeOp(this)"><i class="bi bi-x-lg"></i></button></div>
+        <div class="d-flex flex-wrap gap-2">${ALL_COLUMNS.map(c => `<div class="form-check form-check-inline mb-0"><input class="form-check-input col-check" type="checkbox" value="${c}" id="qc-${c}" checked><label class="form-check-label small" for="qc-${c}" style="font-family:var(--mono);">${c}</label></div>`).join("")}</div></div>`,
+};
+function addOp(t) {
+    if (t !== "filter" && document.querySelector(`.op-row[data-type="${t}"]`)) { showToast(`${t} already added`, "error"); return; }
+    document.getElementById("query-ops").insertAdjacentHTML("beforeend", OP_TEMPLATES[t]());
+    document.getElementById("query-empty").style.display = "none";
+}
+function removeOp(btn) { btn.closest(".op-row").remove(); if (!document.querySelector(".op-row")) document.getElementById("query-empty").style.display = ""; }
+function toggleAllCols(c) { document.querySelectorAll(".col-check").forEach(cb => cb.checked = c); }
+function buildQueryFromUI() {
+    const q = {};
+    const filters = [];
+    document.querySelectorAll('.op-row[data-type="filter"]').forEach(r => {
+        const col = r.querySelector(".op-col").value, op = r.querySelector(".op-operator").value, val = r.querySelector(".op-value").value;
+        if (col && op && val) filters.push({ col, op, val });
+    });
+    if (filters.length) q.filters = filters;
+    const d = document.querySelector('.op-row[data-type="deduplicate"]');
+    if (d) q.deduplicate = { col: d.querySelector(".op-col").value, keep: d.querySelector(".op-keep").value };
+    const g = document.querySelector('.op-row[data-type="group_by"]');
+    if (g) q.group_by = { col: g.querySelector(".op-col").value, agg: g.querySelector(".op-agg").value };
+    const s = document.querySelector('.op-row[data-type="sort"]');
+    if (s) q.sort = { col: s.querySelector(".op-col").value, dir: s.querySelector(".op-dir").value };
+    const l = document.querySelector('.op-row[data-type="limit"]');
+    if (l) q.limit = { mode: l.querySelector(".op-mode").value, n: parseInt(l.querySelector(".op-n").value) || 100 };
+    const c = document.querySelector('.op-row[data-type="columns"]');
+    if (c) { const sel = Array.from(c.querySelectorAll(".col-check:checked")).map(cb => cb.value); if (sel.length && sel.length < ALL_COLUMNS.length) q.columns = sel; }
+    return q;
+}
+function loadTable(page) {
+    let url = `/arcticdb/api/table/${enc(LIB)}/${enc(SYM)}?page=${page}`;
+    if (Object.keys(currentQuery).length) url += `&query=${enc(JSON.stringify(currentQuery))}`;
+    htmx.ajax("GET", url, "#ac-table");
+}
+function executeQuery() { currentQuery = buildQueryFromUI(); loadTable(1); }
+function clearQuery() { currentQuery = {}; document.getElementById("query-ops").innerHTML = ""; document.getElementById("query-empty").style.display = ""; loadTable(1); }
+function sortBy(col) {
+    if (document.getElementById("query-panel").style.display === "none") toggleQuery();
+    let s = document.querySelector('.op-row[data-type="sort"]');
+    if (!s) { addOp("sort"); s = document.querySelector('.op-row[data-type="sort"]'); }
+    const cs = s.querySelector(".op-col"), ds = s.querySelector(".op-dir");
+    if (currentQuery.sort && currentQuery.sort.col === col) ds.value = currentQuery.sort.dir === "asc" ? "desc" : "asc";
+    else { cs.value = col; ds.value = "asc"; }
+    executeQuery();
 }
 
 {% if is_admin %}

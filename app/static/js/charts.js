@@ -20,9 +20,21 @@
     function _afterMount(chart) {
         if (!global._langeCharts) global._langeCharts = [];
         global._langeCharts.push(chart);
-        requestAnimationFrame(() => requestAnimationFrame(() => { try { chart.resize(); } catch (e) {} }));
+        // Resize across several frames/timeouts so the canvas reliably fills its
+        // container even if it was mounted before layout settled (e.g. just-shown panel).
+        const kick = () => { try { chart.resize(); } catch (e) {} };
+        requestAnimationFrame(() => requestAnimationFrame(kick));
+        setTimeout(kick, 120);
+        setTimeout(kick, 350);
         return chart;
     }
+
+    // Keep all live charts sized to their containers on window resize.
+    let _rzTimer;
+    global.addEventListener("resize", () => {
+        clearTimeout(_rzTimer);
+        _rzTimer = setTimeout(() => (global._langeCharts || []).forEach(c => { try { c.resize(); } catch (e) {} }), 120);
+    });
 
     function themeColors() {
         return {

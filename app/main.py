@@ -70,12 +70,13 @@ app.mount("/admin", build_admin_app())
 # ── Routers ──
 # Auth + gated fragments register BEFORE the public catch-all `/{ac_slug}`,
 # which is greedy and must stay LAST.
-from app.routes import arcticdb, auth_routes, gated, mcp, public  # noqa: E402
+from app.routes import arcticdb, articles_admin, auth_routes, gated, mcp, public  # noqa: E402
 
 app.include_router(auth_routes.router)
 app.include_router(gated.router)
 app.include_router(mcp.router)
 app.include_router(arcticdb.router)
+app.include_router(articles_admin.router)  # before public: /articles/new wins over /articles/{slug}
 app.include_router(public.router)
 
 

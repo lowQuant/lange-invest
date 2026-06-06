@@ -10,6 +10,7 @@ optional ``image`` (OG image path).
 from __future__ import annotations
 
 import datetime as _dt
+import re as _re
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -18,6 +19,11 @@ import markdown as _md
 from app.config import CONTENT_DIR
 
 ARTICLES_DIR = CONTENT_DIR / "articles"
+
+
+def slugify(title: str) -> str:
+    s = _re.sub(r"[^a-z0-9]+", "-", (title or "").lower()).strip("-")
+    return _re.sub(r"-{2,}", "-", s)[:80] or "post"
 
 
 @dataclass(frozen=True)
@@ -109,3 +115,42 @@ def get_article(slug: str) -> Article | None:
 
 def reload() -> None:
     _all.cache_clear()
+
+
+# ── Admin authoring (write/remove markdown-or-HTML article files) ─────────────
+
+def save_article(title: str, body: str, date: str = "", summary: str = "",
+                 tags: str = "", category: str = "", fmt: str = "markdown",
+                 slug: str | None = None) -> str:
+    """Create/overwrite an article file. Returns the slug."""
+    slug = slug or slugify(title)
+    ext = "html" if fmt == "html" else "md"
+    fm = (
+        "---\n"
+        f"title: {title.strip()}\n"
+        f"date: {date or _dt.date.today().isoformat()}\n"
+        f"summary: {summary.strip()}\n"
+        f"tags: {tags.strip()}\n"
+        f"category: {category.strip()}\n"
+        f"format: {'html' if ext == 'html' else 'markdown'}\n"
+        "---\n"
+    )
+    ARTICLES_DIR.mkdir(parents=True, exist_ok=True)
+    # Avoid duplicate slug across extensions.
+    other = ARTICLES_DIR / f"{slug}.{'md' if ext == 'html' else 'html'}"
+    if other.exists():
+        other.unlink()
+    (ARTICLES_DIR / f"{slug}.{ext}").write_text(fm + (body or ""), encoding="utf-8")
+    reload()
+    return slug
+
+
+def delete_article(slug: str) -> bool:
+    removed = False
+    for ext in ("md", "html"):
+        p = ARTICLES_DIR / f"{slug}.{ext}"
+        if p.exists():
+            p.unlink()
+            removed = True
+    reload()
+    return removed

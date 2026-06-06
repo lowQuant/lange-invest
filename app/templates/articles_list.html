@@ -8,7 +8,10 @@
         <span class="eyebrow">Research</span>
         <h1>Articles</h1>
     </div>
-    {% if articles %}<span class="label-mono">{{ articles | length }} posts</span>{% endif %}
+    <div class="d-flex align-items-center gap-2">
+        {% if articles %}<span class="label-mono">{{ articles | length }} posts</span>{% endif %}
+        {% if user and user.is_admin %}<a href="/articles/new" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> New article</a>{% endif %}
+    </div>
 </div>
 
 {% if articles %}
@@ -20,14 +23,22 @@
         {% set ns.year = yr %}
         <div class="year-head"><span>{{ yr }}</span></div>
     {% endif %}
-    <a class="article-row" href="/articles/{{ a.slug }}">
-        <div class="ar-date">{{ a.date_display.split(',')[0] if a.date else '' }}</div>
+    <div class="article-row" style="position:relative;">
+        <a href="/articles/{{ a.slug }}" class="ar-date" style="text-decoration:none;">{{ a.date_display.split(',')[0] if a.date else '' }}</a>
         <div class="ar-body">
             {% if a.category %}<span class="ar-cat">{{ a.category }}</span>{% endif %}
-            <span class="ar-title">{{ a.title }}</span>
+            <a href="/articles/{{ a.slug }}" class="ar-title" style="text-decoration:none;">{{ a.title }}</a>
             {% if a.summary %}<span class="ar-sum">{{ a.summary }}</span>{% endif %}
         </div>
-    </a>
+        {% if user and user.is_admin %}
+        <div style="position:absolute; top:.6rem; right:.25rem;" class="d-flex gap-1">
+            <a href="/articles/{{ a.slug }}/edit" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
+            <button class="btn btn-sm btn-outline-danger" title="Delete"
+                    hx-delete="/articles/{{ a.slug }}" hx-confirm="Delete '{{ a.title }}'?"
+                    hx-on::after-request="if(event.detail.successful) window.location.reload()"><i class="bi bi-trash"></i></button>
+        </div>
+        {% endif %}
+    </div>
     {% endfor %}
 </div>
 {% else %}

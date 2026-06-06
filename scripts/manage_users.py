@@ -32,11 +32,41 @@ def main() -> None:
     add.add_argument("--entitlements", default="", help="Comma-separated (e.g. signals,real_portfolio)")
 
     sub.add_parser("list", help="List users (no secrets).")
+
+    code = sub.add_parser("code", help="Print the CURRENT 6-digit 2FA code for a user (testing).")
+    code.add_argument("--username", required=True)
+
+    secret = sub.add_parser("secret", help="Show a user's TOTP secret + otpauth URI (to enroll in an app).")
+    secret.add_argument("--username", required=True)
+
     args = ap.parse_args()
+
+    def _find(username):
+        u = next((x for x in _load_raw().get("users", []) if x.get("username") == username), None)
+        if not u:
+            raise SystemExit(f"No user named {username!r}. Run: manage_users.py list")
+        return u
 
     if args.cmd == "list":
         for u in _load_raw().get("users", []):
             print(f"{u['username']:20} role={u.get('role'):10} entitlements={u.get('entitlements')}")
+        return
+
+    if args.cmd == "code":
+        import pyotp
+        u = _find(args.username)
+        t = pyotp.TOTP(u["totp_secret"])
+        print(f"\n  Current 6-digit code for {args.username!r}:  {t.now()}")
+        print(f"  (valid for ~{30 - int(__import__('time').time()) % 30}s — type it at /login)\n")
+        return
+
+    if args.cmd == "secret":
+        import pyotp
+        u = _find(args.username)
+        uri = pyotp.TOTP(u["totp_secret"]).provisioning_uri(name=args.username, issuer_name=get_config().name)
+        print(f"\n  TOTP secret : {u['totp_secret']}")
+        print(f"  otpauth URI : {uri}")
+        print("  In your authenticator app: Add account → enter this secret manually.\n")
         return
 
     ents = [e.strip() for e in args.entitlements.split(",") if e.strip()]

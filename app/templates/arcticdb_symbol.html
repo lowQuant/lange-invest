@@ -223,7 +223,8 @@ function draw() {
 }
 
 document.addEventListener("themechange", () => setTimeout(draw, 50));
-document.addEventListener("DOMContentLoaded", () => { if (IS_MULTI) onSource(); else { syncY(); } draw(); });
+// Single initial draw: onSource()/onCMode() already call draw() for multiindex.
+document.addEventListener("DOMContentLoaded", () => { if (IS_MULTI) { onSource(); } else { syncY(); draw(); } });
 </script>
 {% endif %}
 {% endblock %}

@@ -15,6 +15,15 @@
     const COLORS = ["#3b82f6", "#10b981", "#ef4444", "#a855f7", "#f97316", "#06b6d4", "#ec4899", "#84cc16"];
     const STUDY_COLORS = ["#ef4444", "#f97316", "#10b981", "#a855f7", "#06b6d4", "#ec4899"];
 
+    // Track instances and force a resize once layout settles, so the canvas always
+    // fills its container (avoids the "renders then shrinks" flash).
+    function _afterMount(chart) {
+        if (!global._langeCharts) global._langeCharts = [];
+        global._langeCharts.push(chart);
+        requestAnimationFrame(() => requestAnimationFrame(() => { try { chart.resize(); } catch (e) {} }));
+        return chart;
+    }
+
     function themeColors() {
         return {
             grid: cssVar('--chart-grid') || 'rgba(255,255,255,0.04)',
@@ -111,9 +120,7 @@
                 },
                 plugins: [plugin],
             });
-            if (!global._langeCharts) global._langeCharts = [];
-            global._langeCharts.push(chart);
-            return chart;
+            return _afterMount(chart);
         }
 
         let datasetIdx = 0, studyIdx = 0;
@@ -163,9 +170,7 @@
             },
         });
 
-        if (!global._langeCharts) global._langeCharts = [];
-        global._langeCharts.push(chart);
-        return chart;
+        return _afterMount(chart);
     }
 
     function redrawAll() {

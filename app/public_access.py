@@ -14,11 +14,12 @@ snapshot-only deployment can boot without the ArcticDB driver installed.
 """
 from __future__ import annotations
 
-from typing import Any
-
-import pandas as pd
+from typing import TYPE_CHECKING, Any
 
 from app.config import get_config
+
+if TYPE_CHECKING:  # type-check only; keeps pandas out of the boot path
+    import pandas as pd
 
 
 class AccessDenied(Exception):

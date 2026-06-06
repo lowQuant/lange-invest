@@ -1,0 +1,21 @@
+{# Gated live-signals fragment (rendered only for entitled users). #}
+{% if error %}
+    <div class="alert alert-info mb-0">{{ error }}</div>
+{% elif rows %}
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <span class="label-mono">{{ rows | length }} signals · {{ variant.name }}</span>
+        <span class="badge bg-success">live</span>
+    </div>
+    <div class="table-container">
+        <table class="table table-sm">
+            <thead><tr>{% for c in columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info mb-0">No live signals at the moment.</div>
+{% endif %}

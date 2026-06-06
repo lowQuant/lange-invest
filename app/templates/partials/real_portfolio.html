@@ -1,0 +1,42 @@
+{# Gated real-portfolio fragment (entitled users only). Data from the private store. #}
+{% if not pf %}
+    <div class="alert alert-info mb-0">No IBKR report ingested yet.</div>
+{% else %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <span class="label-mono">As of {{ pf.as_of }} · {{ pf.base_currency }}</span>
+    <span class="badge bg-success">live account</span>
+</div>
+
+{% set total = pf.pnl.total %}
+<div class="stat-grid mb-3">
+    <div class="stat-tile"><span class="stat-label">NAV</span><span class="stat-value">{{ '{:,.0f}'.format(pf.nav) }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Unrealized P&L</span>
+        <span class="stat-value {{ 'up' if pf.pnl.unrealized >= 0 else 'down' }}">{{ '{:,.0f}'.format(pf.pnl.unrealized) }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Realized P&L</span>
+        <span class="stat-value {{ 'up' if pf.pnl.realized >= 0 else 'down' }}">{{ '{:,.0f}'.format(pf.pnl.realized) }}</span></div>
+    <div class="stat-tile"><span class="stat-label">Total P&L</span>
+        <span class="stat-value {{ 'up' if total >= 0 else 'down' }}">{{ '{:,.0f}'.format(total) }}</span></div>
+</div>
+
+<div class="table-container">
+    <table class="table table-sm">
+        <thead><tr>
+            <th>Symbol</th><th>Class</th><th class="col-num">Qty</th><th class="col-num">Mark</th>
+            <th class="col-num">Value</th><th class="col-num">Unreal. P&L</th><th class="col-num">Weight</th>
+        </tr></thead>
+        <tbody>
+            {% for p in pf.positions %}
+            <tr>
+                <td>{{ p.symbol }}</td>
+                <td><span class="badge bg-secondary">{{ p.asset_class }}</span></td>
+                <td class="col-num {{ 'pill-long' if p.quantity >= 0 else 'pill-short' }}">{{ '{:,.0f}'.format(p.quantity) }}</td>
+                <td class="col-num">{{ '{:,.2f}'.format(p.mark_price) }}</td>
+                <td class="col-num">{{ '{:,.0f}'.format(p.position_value) }}</td>
+                <td class="col-num {{ 'text-up' if p.unrealized_pnl >= 0 else 'text-down' }}">{{ '{:,.0f}'.format(p.unrealized_pnl) }}</td>
+                <td class="col-num">{{ '{:.1f}%'.format(p.weight * 100) }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

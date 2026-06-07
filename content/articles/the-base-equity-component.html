@@ -1,0 +1,116 @@
+---
+title: The Base Equity Component — Why the Default Long Is the Nasdaq, Not the S&P
+date: 2026-06-07
+summary: Diversification might be the only free lunch in finance. So we diversify by instrument, style, strategy and timeframe — not just by sector. But you have to start somewhere. Here we build the base equity sleeve and show, with code and data, why a volatility-matched Nasdaq is at least as good as a fully-invested S&P 500 — and frees up roughly a quarter of the portfolio for everything else.
+tags: portfolio construction, ETFs, volatility, QQQ, SPY, python
+category: Portfolio construction
+format: html
+image: /static/blog/the-base-equity-component/1_qqq_vs_spy.png
+---
+<p>Diversification might be the only free lunch in finance. So I don&rsquo;t think it is enough to diversify with a basket of stocks across sectors and sizes (small- to large-cap). I don&rsquo;t even think diversifying by <em>asset class</em> is sufficient.</p>
+
+<p>We saw why in the recent sell-off. The moment the market started pricing rising interest rates, <strong>everything</strong> went out the door at once &mdash; bonds, gold, crypto <em>and</em> stocks. When the discount rate moves, cross-asset correlations snap toward one and the &ldquo;diversified&rdquo; portfolio behaves like a single, leveraged bet on liquidity.</p>
+
+<p>So I believe you have to diversify in the widest sense possible:</p>
+
+<ul>
+    <li>by <strong>instrument</strong> &mdash; cash securities (stocks, bonds), options, futures;</li>
+    <li>by <strong>style</strong> &mdash; momentum, value, carry, quality;</li>
+    <li>by <strong>strategy</strong> &mdash; buy &amp; hold, mean reversion, trend following;</li>
+    <li>by <strong>timeframe</strong> &mdash; intraday to multi-year.</li>
+</ul>
+
+<p>Sounds complicated? It is. But that&rsquo;s what this site is about.</p>
+
+<h2>Where to start?</h2>
+
+<p>You have to start somewhere. And as we know, <em>time in the market beats timing the market</em> &mdash; a point I made when I showed that even trend signals work best with heavy smoothing (see <a href="/articles/market-timing-consider-additional-smoothing-when-using-trend-indicators">Market Timing &mdash; Consider Additional Smoothing When Using Trend Indicators</a>). We want to be invested in the market.</p>
+
+<p>The base strategy is therefore a <strong>long equity</strong> position. Every other sleeve &mdash; the trend models, the short-vol books, the mean-reversion baskets &mdash; gets layered <em>on top of</em> this foundation. And because everything else adds complexity, the foundation itself should be as simple as it possibly can be.</p>
+
+<blockquote>The base strategy should be as simple as it gets. That means one broad, liquid, low-cost equity ETF.</blockquote>
+
+<p>Which one? The obvious candidates are the two most-traded equity ETFs on the planet: <strong>SPY</strong> (S&amp;P 500) and <strong>QQQ</strong> (Nasdaq-100). Let&rsquo;s actually look at the data instead of arguing about it.</p>
+
+<h2>SPY vs QQQ: more return, more pain</h2>
+
+<p>A few lines of Python pull the full common history (QQQ launched in March 1999), compute the total-return path on a log scale, and a rolling 1-year annualised volatility underneath it.</p>
+
+<pre><code class="language-python">import yfinance as yf, numpy as np
+
+px = yf.download(["SPY", "QQQ"], start="1999-03-10",
+                 auto_adjust=True)["Close"].dropna()
+rets = px.pct_change().dropna()
+
+ann_ret = lambda r: (1 + r).prod() ** (252 / len(r)) - 1
+ann_vol = lambda r: r.std() * np.sqrt(252)
+
+# rolling 1-year volatility for the lower panel
+roll_vol = rets.rolling(252).std() * np.sqrt(252)
+</code></pre>
+
+<p><img src="/static/blog/the-base-equity-component/1_qqq_vs_spy.png" alt="Total return and rolling 1-year volatility of QQQ vs SPY, 1999-2026" /></p>
+
+<p>The picture is unambiguous. Over ~27 years QQQ turned $100 into roughly <strong>$1,640</strong> versus about <strong>$920</strong> for SPY. But look at the lower panel: QQQ&rsquo;s rolling volatility sits <em>above</em> SPY&rsquo;s in almost every regime, and its dot-com drawdown reached an <strong>83%</strong> peak-to-trough loss against SPY&rsquo;s &ldquo;merely&rdquo; 55%.</p>
+
+<table>
+    <thead>
+        <tr><th>Metric (1999&ndash;2026)</th><th>SPY</th><th>QQQ</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Annualised return</td><td>8.5%</td><td>10.8%</td></tr>
+        <tr><td>Annualised volatility</td><td>19.3%</td><td>26.9%</td></tr>
+        <tr><td>Total return</td><td>+819%</td><td>+1,537%</td></tr>
+        <tr><td>Max drawdown</td><td>&minus;55%</td><td>&minus;83%</td></tr>
+        <tr><td>Return / vol (rf = 0)</td><td>0.44</td><td>0.40</td></tr>
+    </tbody>
+</table>
+
+<p>This is the whole point. QQQ is the higher-octane engine, but it&rsquo;s also ~1.4&times; as volatile. Putting 100% of your capital into <em>either</em> ETF at face value is a category error: you&rsquo;re choosing a return <em>and</em> a risk level in a single click, when those two decisions should be made separately. There is no reason to deploy 100% of capital in SPY just because it &ldquo;feels&rdquo; safer, and no reason to white-knuckle 100% QQQ just because it returns more.</p>
+
+<h2>Separate the two decisions: volatility matching</h2>
+
+<p>The fix is to size the position by <strong>risk</strong>, not by dollars. We pick a target volatility &mdash; here, simply SPY&rsquo;s own volatility &mdash; and scale QQQ exposure down until it carries the same risk, parking the rest in cash:</p>
+
+<pre><code class="language-python"># weight that makes QQQ carry SPY's volatility
+w = ann_vol(rets["SPY"]) / ann_vol(rets["QQQ"])   # -> ~0.72
+
+# vol-matched sleeve: w in QQQ, (1-w) in cash (0% assumed)
+qqq_vm = rets["QQQ"] * w
+print(w, ann_vol(qqq_vm), ann_vol(rets["SPY"]))   # vols now equal
+</code></pre>
+
+<p><img src="/static/blog/the-base-equity-component/2_vol_matched.png" alt="Volatility-matched QQQ versus fully invested SPY, with capital utilisation bar" /></p>
+
+<blockquote><strong>The result.</strong> Matching QQQ to SPY&rsquo;s ~19.3% volatility takes only about <strong>72% of capital in QQQ</strong>, with the remaining ~28% sitting in cash. That vol-matched sleeve delivers essentially the <strong>same long-run return as a fully-invested SPY</strong> (8.4% vs 8.5% annualised) at the <strong>same volatility</strong> &mdash; while freeing up roughly a quarter of the portfolio.</blockquote>
+
+<p>That freed capital is exactly the raw material the rest of this site is built on. It can sit in cash earning the risk-free rate (we conservatively assumed 0% above), or &mdash; far more interestingly &mdash; fund the diversifying sleeves: trend, carry, short-vol, mean reversion. Same equity risk, same equity return, <em>plus</em> room for the only free lunch in finance.</p>
+
+<h2>A word of honesty about the regime</h2>
+
+<p>Notice that vol-matching over the full sample gives ~72% capital and merely <em>matches</em> SPY&rsquo;s return &mdash; it does not beat it. That&rsquo;s because the 1999 start drags the brutal dot-com collapse into the numbers, the one episode where the Nasdaq&rsquo;s extra risk was not rewarded. It&rsquo;s a feature, not a bug: it&rsquo;s precisely why we vol-manage the sleeve and diversify beyond it.</p>
+
+<p>If we re-run the same volatility match over calmer, more recent windows, the case for the vol-matched Nasdaq gets stronger, not weaker &mdash; it produces <em>higher</em> returns than SPY at equal risk:</p>
+
+<table>
+    <thead>
+        <tr><th>Window</th><th>QQQ weight</th><th>Vol-matched QQQ return</th><th>SPY return</th></tr>
+    </thead>
+    <tbody>
+        <tr><td>Full (1999&ndash;)</td><td>72%</td><td>8.4%</td><td>8.5%</td></tr>
+        <tr><td>Since 2003</td><td>86%</td><td>14.2%</td><td>11.5%</td></tr>
+        <tr><td>Since 2010</td><td>83%</td><td>16.1%</td><td>14.2%</td></tr>
+        <tr><td>Since 2015</td><td>81%</td><td>15.7%</td><td>13.7%</td></tr>
+    </tbody>
+</table>
+
+<p>The capital number isn&rsquo;t a magic constant &mdash; it floats with the QQQ/SPY volatility ratio, which has actually <em>narrowed</em> to roughly 1.2&times; in the modern regime. I won&rsquo;t cherry-pick a window; the conservative full-sample read &mdash; <strong>equal return, equal risk, ~28% of capital freed</strong> &mdash; already makes the decision for us.</p>
+
+<h2>The verdict</h2>
+
+<p>My base equity sleeve is a <strong>volatility-managed long in the Nasdaq-100 (QQQ)</strong>, sized to the risk I actually want to run rather than to the cash I happen to have. It is the simplest possible foundation, it is at least as efficient as the default S&amp;P 500 buy-and-hold, and &mdash; crucially &mdash; it leaves capital on the table for everything else we&rsquo;re going to build.</p>
+
+<p>You have to start somewhere. We start here.</p>
+
+<hr />
+<p><em>Figures computed from adjusted daily closes (Yahoo Finance via <code>yfinance</code>), 1999-03-10 to 2026-06-05; cash assumed to earn 0%. The full chart-generation script lives at <code>articles/generate_charts.py</code> in the site repo (research workspace, git-ignored).</em></p>

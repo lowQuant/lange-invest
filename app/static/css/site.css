@@ -378,6 +378,7 @@ code, .mono, .tabular, .num {
     padding: 2.25rem 1.5rem 3rem;
 }
 .qt-shell.narrow { max-width: 720px; }
+.qt-shell.reading { max-width: 820px; }
 
 /* Page head — title on a single hairline. */
 .page-head {
@@ -833,13 +834,21 @@ code, .mono, .tabular, .num {
     .ar-date { padding-top: 0; }
 }
 
-/* Article prose — long-form reading column with a drop cap. */
+/* Article prose — long-form reading column with a drop cap.
+   Paragraphs use a measured reading column; figures, tables and code break
+   out to the full shell so charts breathe. */
 .prose {
-    max-width: 64ch;
+    max-width: 100%;
     font-family: var(--serif-body);
     font-size: 1.125rem;
     line-height: 1.7;
     color: var(--ink-1);
+}
+.prose p,
+.prose ul,
+.prose ol,
+.prose blockquote {
+    max-width: 64ch;
 }
 .prose > .eyebrow {
     display: block;
@@ -899,7 +908,38 @@ code, .mono, .tabular, .num {
     margin: 1.4rem 0;
     font-style: italic;
 }
-.prose table { width: 100%; margin: 1.2rem 0; }
+.prose blockquote em,
+.prose blockquote strong { font-style: normal; }
+.prose blockquote strong { color: var(--ink-1); }
+
+.prose table { width: 100%; margin: 1.6rem 0; max-width: 100%; }
+
+/* Figures / charts — let them break out of the reading measure and scale. */
+.prose img,
+.prose figure img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+    margin: 1.8rem auto;
+    background: var(--paper);
+}
+/* Defeat hard-coded width/height/style attributes from legacy articles. */
+.prose img[width],
+.prose img[height],
+.prose img[style] {
+    width: 100% !important;
+    height: auto !important;
+}
+.prose figcaption {
+    font-family: var(--serif-display);
+    font-style: italic;
+    color: var(--ink-3);
+    font-size: 0.95rem;
+    text-align: center;
+    margin: -0.8rem 0 1.8rem;
+    font-variation-settings: "opsz" 14, "SOFT" 80;
+}
 .prose hr {
     border: 0;
     text-align: center;

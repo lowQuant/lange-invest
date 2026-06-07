@@ -185,6 +185,63 @@ def build_continuous(df, rank, col, method, roll_rule) -> pd.Series:
     return pd.Series([prices[i] * adj[i] for i in range(n)], index=dates_arr, name=f"cont{rank}_{col}_adjr")
 
 
+def _term_structure(df: pd.DataFrame, col: str, max_dates: int = 12) -> tuple[list[str], list[dict]]:
+    """Price-by-contract curves, one per unique date in the (already filtered) view.
+
+    x-axis = contracts ordered by DTE (or alphabetically if no `dte` column).
+    Returns (contract_labels, datasets). If too many dates would be drawn, keep
+    only the most recent ``max_dates``.
+    """
+    if not isinstance(df.index, pd.MultiIndex) or col not in df.columns:
+        return [], []
+    dates = sorted(df.index.get_level_values(0).unique())
+    truncated = len(dates) > max_dates
+    if truncated:
+        dates = dates[-max_dates:]
+        df = df.loc[dates[0]:]  # keep only the rows we'll actually use
+
+    has_dte = "dte" in df.columns
+    # Global contract order — anchor on the most recent date so the most relevant
+    # contracts come first; older expired contracts appear after.
+    try:
+        ref = df.loc[dates[-1]]
+    except KeyError:
+        ref = None
+    if isinstance(ref, pd.Series):
+        ref = ref.to_frame().T
+    if has_dte and ref is not None and len(ref):
+        live = ref[ref["dte"] > 0]
+        ordered = live.sort_values(by="dte").index.tolist()
+        # append any contracts that don't appear on the reference date
+        all_c = df.index.get_level_values(1).unique().tolist()
+        for c in all_c:
+            if c not in ordered:
+                ordered.append(c)
+    else:
+        ordered = sorted(df.index.get_level_values(1).unique().tolist())
+
+    datasets = []
+    for d in dates:
+        try:
+            slab = df.loc[d]
+        except KeyError:
+            continue
+        if isinstance(slab, pd.Series):
+            slab = slab.to_frame().T
+        data = []
+        for c in ordered:
+            if c in slab.index:
+                v = slab.loc[c, col]
+                # if there are duplicate contract rows for this date, take the first
+                if isinstance(v, pd.Series):
+                    v = v.iloc[0]
+                data.append(float(v) if pd.notna(v) else None)
+            else:
+                data.append(None)
+        datasets.append({"label": _fmt_index(d), "data": data})
+    return ordered, datasets
+
+
 def _label(sym, rank, col, method) -> str:
     suffix = {"back_diff": " [adj-Δ]", "back_ratio": " [adj-r]", "perpetual": " [perp]"}.get(method, "")
     if method == "perpetual":
@@ -327,6 +384,12 @@ def build_chart(df: pd.DataFrame, sym: str, p: dict) -> tuple[dict | None, list,
         ds += _study_datasets(ds[0]["data"], p.get("studies", ""))
         main = {"x_values": [_fmt_index(v) for v in s.index], "x_label": "date",
                 "chart_type": chart_type if chart_type != "candlestick" else "line", "datasets": ds}
+    elif is_multi and mode == "term_structure":
+        contracts, ds = _term_structure(df, col)
+        if not ds:
+            return None, [], "Term structure needs a MultiIndex (date, contract) symbol with the chosen column."
+        main = {"x_values": [str(c) for c in contracts], "x_label": "contract",
+                "chart_type": "line", "datasets": ds}
     elif is_multi and mode == "overlay":
         ds, xv = [], None
         for rank in (int(p.get("spread_rank1", 1)), int(p.get("spread_rank2", 2))):

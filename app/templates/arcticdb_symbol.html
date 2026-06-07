@@ -106,10 +106,11 @@
         <div class="ac-toolbar" id="ac-contract">
             <span class="ac-lbl">Contract</span>
             <span class="ac-group">
-                <select id="ac-cmode" class="form-select form-select-sm" style="width:115px;" onchange="onCMode()">
+                <select id="ac-cmode" class="form-select form-select-sm" style="width:135px;" onchange="onCMode()">
                     <option value="single">Continuous</option>
                     <option value="overlay">Overlay</option>
                     <option value="spread" selected>Spread</option>
+                    <option value="term_structure">Term structure</option>
                 </select>
             </span>
             <span class="ac-group"><span class="ac-lbl">Column</span>
@@ -253,7 +254,9 @@ function onCMode() {
     const m = document.getElementById("ac-cmode").value;
     document.getElementById("ac-single").style.display = m === "single" ? "" : "none";
     document.getElementById("ac-spread").style.display = (m === "spread" || m === "overlay") ? "" : "none";
-    document.getElementById("ac-cont").style.display = m === "spread" ? "none" : "";
+    // Continuous/roll selectors only make sense when we're building a continuous
+    // series; spreads pick raw rank-N, term structure has no temporal stitching.
+    document.getElementById("ac-cont").style.display = (m === "spread" || m === "term_structure") ? "none" : "";
     draw();
 }
 function syncY() {
@@ -275,8 +278,8 @@ function draw() {
         const m = document.getElementById("ac-cmode").value;
         url += `&contract_mode=${m}&contract_col=${enc(document.getElementById("ac-col").value)}`;
         if (m === "single") url += `&contract_rank=${document.getElementById("ac-rank").value}`;
-        else url += `&spread_rank1=${document.getElementById("ac-r1").value}&spread_rank2=${document.getElementById("ac-r2").value}`;
-        if (m !== "spread") url += `&continuous_method=${document.getElementById("ac-method").value}&roll_rule=${document.getElementById("ac-roll").value}`;
+        else if (m !== "term_structure") url += `&spread_rank1=${document.getElementById("ac-r1").value}&spread_rank2=${document.getElementById("ac-r2").value}`;
+        if (m === "single" || m === "overlay") url += `&continuous_method=${document.getElementById("ac-method").value}&roll_rule=${document.getElementById("ac-roll").value}`;
     } else {
         url += `&x_col=${enc(document.getElementById("ac-x").value)}`;
         if (type !== "candlestick") {
@@ -286,8 +289,11 @@ function draw() {
         }
     }
     if (acStudies.length) url += `&studies=${enc(JSON.stringify(acStudies))}`;
+    if (Object.keys(currentQuery).length) url += `&query=${enc(JSON.stringify(currentQuery))}`;
     htmx.ajax("GET", url, "#chart-area");
 }
+
+function chartOpen() { return document.getElementById("chart-wrap").style.display !== "none"; }
 
 // ── Studies ──
 function addStudy(type, period) { acStudies.push({ type, period }); renderStudies(); draw(); }
@@ -412,8 +418,8 @@ function loadTable(page) {
     if (Object.keys(currentQuery).length) url += `&query=${enc(JSON.stringify(currentQuery))}`;
     htmx.ajax("GET", url, "#ac-table");
 }
-function executeQuery() { currentQuery = buildQueryFromUI(); loadTable(1); }
-function clearQuery() { currentQuery = {}; document.getElementById("query-ops").innerHTML = ""; document.getElementById("query-empty").style.display = ""; loadTable(1); }
+function executeQuery() { currentQuery = buildQueryFromUI(); loadTable(1); if (chartOpen()) draw(); }
+function clearQuery() { currentQuery = {}; document.getElementById("query-ops").innerHTML = ""; document.getElementById("query-empty").style.display = ""; loadTable(1); if (chartOpen()) draw(); }
 function sortBy(col) {
     if (document.getElementById("query-panel").style.display === "none") toggleQuery();
     let s = document.querySelector('.op-row[data-type="sort"]');

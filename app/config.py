@@ -19,6 +19,9 @@ CONFIG_FILE = ROOT / "config" / "site.toml"
 CONTENT_DIR = ROOT / "content"
 SNAPSHOT_DIR = Path(os.getenv("SNAPSHOT_DIR", str(ROOT / "data" / "snapshots")))
 PRIVATE_DIR = Path(os.getenv("PRIVATE_DIR", str(ROOT / "data" / "private")))
+# Runtime-authored articles live OUTSIDE the git-tracked content/ dir so that
+# `git pull` on the server never conflicts with locally-created posts.
+ARTICLES_USER_DIR = Path(os.getenv("ARTICLES_USER_DIR", str(ROOT / "data" / "articles")))
 
 
 @dataclass(frozen=True)

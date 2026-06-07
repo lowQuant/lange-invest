@@ -38,7 +38,10 @@ app/
   static/            css/site.css (design tokens), js/charts.js (shared Chart.js)
 vendor/core/         vendored arcticdb-viewer engine (single path to ArcticDB)
 config/site.toml     allowlist + data-driven asset-class/variant taxonomy
-content/articles/    markdown posts
+content/articles/    seed markdown/HTML posts (committed to git)
+data/articles/       admin-authored posts at runtime (git-ignored; never conflicts
+                     with `git pull`). Deleting a committed post writes a tombstone
+                     instead of touching the tracked file.
 scripts/             precompute.py, ingest_ibkr.py, manage_users.py, gen_sample_data.py
 tests/               security boundary tests
 ```

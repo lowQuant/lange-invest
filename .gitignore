@@ -8,6 +8,9 @@ data/private/
 data/snapshots/**/*.json
 !data/snapshots/.gitkeep
 
+# Runtime-authored articles (admin UI) — kept out of git so `git pull` stays clean
+data/articles/
+
 # Python
 __pycache__/
 *.pyc

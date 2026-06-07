@@ -835,20 +835,13 @@ code, .mono, .tabular, .num {
 }
 
 /* Article prose — long-form reading column with a drop cap.
-   Paragraphs use a measured reading column; figures, tables and code break
-   out to the full shell so charts breathe. */
+   Body, figures, tables and code all fill the shell width. */
 .prose {
     max-width: 100%;
     font-family: var(--serif-body);
     font-size: 1.125rem;
     line-height: 1.7;
     color: var(--ink-1);
-}
-.prose p,
-.prose ul,
-.prose ol,
-.prose blockquote {
-    max-width: 64ch;
 }
 .prose > .eyebrow {
     display: block;
@@ -1265,18 +1258,6 @@ td.col-num, th.col-num { text-align: right; }
     text-decoration: none;
 }
 .qt-footer-inner a:hover { color: var(--signature); }
-.qt-footer-inner .colophon-disclaimer {
-    grid-column: 1 / -1;
-    font-family: var(--serif-body);
-    font-size: 0.85rem;
-    color: var(--ink-3);
-    text-transform: none;
-    letter-spacing: normal;
-    font-style: italic;
-    border-top: 1px solid var(--rule-1);
-    padding-top: 0.85rem;
-    margin-top: 0.5rem;
-}
 
 /* ════════════════════════════════════════════════════════════════════════════
    Misc utilities & legacy shims

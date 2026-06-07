@@ -257,6 +257,12 @@ function onCMode() {
     // Continuous/roll selectors only make sense when we're building a continuous
     // series; spreads pick raw rank-N, term structure has no temporal stitching.
     document.getElementById("ac-cont").style.display = (m === "spread" || m === "term_structure") ? "none" : "";
+    // Term structure reads best as bars (one value per expiry, no temporal axis).
+    // Only nudge the default; leave the user's choice alone on subsequent picks.
+    if (m === "term_structure") {
+        const t = document.getElementById("ac-type");
+        if (t && t.value === "line") t.value = "bar";
+    }
     draw();
 }
 function syncY() {

@@ -935,7 +935,15 @@ code, .mono, .tabular, .num {
     font-size: 1.2rem;
     margin: 1.6rem 0 0.4rem;
 }
-.prose p { color: var(--ink-1); margin: 0 0 1em; }
+.prose p {
+    color: var(--ink-1);
+    margin: 0 0 1em;
+    text-align: justify;
+    text-justify: inter-word;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+}
+.prose ul, .prose ol { text-align: justify; hyphens: auto; -webkit-hyphens: auto; }
 .prose p:first-of-type::first-letter {
     font-family: var(--serif-display);
     float: left;

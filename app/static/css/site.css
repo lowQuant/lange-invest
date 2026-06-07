@@ -241,135 +241,62 @@ code, .mono, .tabular, .num {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Masthead — the editorial top
+   Masthead — quiet serif wordmark + section nav
    ════════════════════════════════════════════════════════════════════════════ */
 .masthead {
     position: relative;
-    padding: 1.2rem 0 0;
-    border-bottom: var(--rule-strong) solid var(--ink-1);
+    padding: 1.4rem 0 0;
     background: var(--paper);
-}
-.masthead::after {
-    /* The signature red rule directly under the strong line. */
-    content: "";
-    position: absolute;
-    left: 0; right: 0; bottom: -5px;
-    height: 1px;
-    background: var(--signature);
-    opacity: 0.85;
 }
 .masthead-inner {
     max-width: 1180px;
     margin: 0 auto;
     padding: 0 1.5rem;
 }
-.masthead-top {
+
+/* Top row: wordmark on the left, controls on the right. */
+.masthead-row {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    border-bottom: 1px solid var(--rule-1);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.85rem;
-    font-family: var(--mono);
-    font-size: 0.6875rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--ink-3);
-}
-.masthead-top-left { display: flex; gap: 1.25rem; align-items: baseline; }
-.masthead-top-right { display: flex; gap: 1rem; align-items: center; }
-.masthead-issue { color: var(--ink-2); }
-.masthead-edition::before {
-    content: "Nº ";
-    color: var(--ink-3);
+    padding-bottom: 1rem;
 }
 
 .masthead-name {
-    display: flex;
+    display: inline-flex;
     align-items: baseline;
-    gap: 0.6rem;
     text-decoration: none;
     color: var(--ink-1) !important;
-    padding-bottom: 0.65rem;
+    font-family: var(--serif-display);
+    font-size: clamp(1.5rem, 2.6vw, 1.85rem);
+    line-height: 1;
+    letter-spacing: -0.005em;
+    font-weight: 460;
+    font-variation-settings: "opsz" 60, "SOFT" 50;
 }
 .masthead-name:hover { color: var(--signature) !important; }
-.masthead-name .mono-mark {
+.masthead-name .wordmark-part { font-weight: 460; }
+.masthead-name .wordmark-slash {
+    color: var(--signature);
+    font-weight: 400;
+    font-style: italic;
+    font-variation-settings: "opsz" 60, "SOFT" 70;
+    transform: translateY(-0.03em);
     display: inline-block;
-    font-family: var(--serif-display);
-    font-size: 2.4rem;
-    line-height: 1;
-    color: var(--signature);
-    font-variation-settings: "opsz" 144, "SOFT" 50, "WONK" 1;
-    font-style: italic;
-    font-weight: 460;
-    transform: translateY(0.12em);
-}
-.masthead-name .wordmark {
-    font-family: var(--serif-display);
-    font-weight: 460;
-    font-size: clamp(2.1rem, 4.6vw, 3.4rem);
-    line-height: 1;
-    letter-spacing: -0.02em;
-    font-variation-settings: "opsz" 144, "SOFT" 60, "WONK" 1;
-}
-.masthead-name .wordmark .ampersand {
-    font-style: italic;
-    color: var(--signature);
-    padding: 0 0.05em;
-}
-.masthead-tagline {
-    font-family: var(--serif-display);
-    font-style: italic;
-    font-size: 0.95rem;
-    color: var(--ink-3);
-    margin: 0.05rem 0 0.65rem;
-    font-variation-settings: "opsz" 14, "SOFT" 80;
 }
 
-/* Section nav under the wordmark — serif small-caps with hairline dividers. */
-.masthead-nav {
+.masthead-right {
     display: flex;
-    align-items: stretch;
-    flex-wrap: wrap;
-    gap: 0;
-    padding-top: 0.5rem;
-    margin-top: 0.5rem;
-    border-top: 1px solid var(--rule-1);
-}
-.masthead-nav-link {
-    font-family: var(--serif-display);
-    font-variant: small-caps;
-    font-weight: 500;
-    font-size: 0.95rem;
-    letter-spacing: 0.05em;
-    color: var(--ink-2);
-    text-decoration: none;
-    padding: 0.6rem 1rem;
-    border-right: 1px solid var(--rule-1);
-    transition: color 120ms, background 120ms;
-    font-variation-settings: "opsz" 14, "SOFT" 50;
-}
-.masthead-nav-link:first-child { padding-left: 0; }
-.masthead-nav-link:last-child { border-right: 0; }
-.masthead-nav-link:hover {
-    color: var(--ink-1);
-    text-decoration: none;
-}
-.masthead-nav-link.active {
-    color: var(--signature);
-    text-decoration: underline;
-    text-decoration-color: var(--signature);
-    text-underline-offset: 5px;
-    text-decoration-thickness: 1px;
+    align-items: center;
+    gap: 1rem;
 }
 
-/* Theme toggle + account link sit on the top strip. */
 .theme-toggle {
     background: transparent;
     border: 0;
     color: var(--ink-3);
-    width: 26px; height: 26px;
+    width: 28px; height: 28px;
     display: inline-flex; align-items: center; justify-content: center;
     cursor: pointer;
     transition: color 120ms;
@@ -377,6 +304,7 @@ code, .mono, .tabular, .num {
 .theme-toggle:hover { color: var(--signature); }
 [data-bs-theme="dark"] .theme-toggle .bi-moon-stars-fill { display: none; }
 [data-bs-theme="light"] .theme-toggle .bi-sun-fill { display: none; }
+
 .masthead-account, .masthead-signin {
     font-family: var(--mono);
     font-size: 0.6875rem;
@@ -396,6 +324,45 @@ code, .mono, .tabular, .num {
     background: var(--up);
 }
 
+/* Section nav — a hairline strip under the wordmark row. */
+.masthead-nav {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    gap: 0;
+    border-top: 1px solid var(--rule-2);
+    border-bottom: 1px solid var(--rule-2);
+}
+.masthead-nav-link {
+    font-family: var(--mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--ink-3);
+    text-decoration: none;
+    padding: 0.85rem 1.25rem;
+    transition: color 120ms, background 120ms;
+    position: relative;
+}
+.masthead-nav-link:first-child { padding-left: 0; }
+.masthead-nav-link:hover {
+    color: var(--ink-1);
+    text-decoration: none;
+    background: transparent;
+}
+.masthead-nav-link.active {
+    color: var(--ink-1);
+}
+.masthead-nav-link.active::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; bottom: -1px;
+    height: 1px;
+    background: var(--signature);
+}
+.masthead-nav-link:first-child.active::after { left: 0; }
+
 /* ════════════════════════════════════════════════════════════════════════════
    App shell + reading column
    ════════════════════════════════════════════════════════════════════════════ */
@@ -412,24 +379,15 @@ code, .mono, .tabular, .num {
 }
 .qt-shell.narrow { max-width: 720px; }
 
-/* Editorial page head — a title that stands on a thick under-rule. */
+/* Page head — title on a single hairline. */
 .page-head {
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 0.5rem 1.5rem;
     align-items: end;
-    padding-bottom: 0.6rem;
-    border-bottom: var(--rule-strong) solid var(--ink-1);
-    position: relative;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--rule-2);
     margin-bottom: 2rem;
-}
-.page-head::after {
-    content: "";
-    position: absolute;
-    left: 0; right: 0; bottom: -5px;
-    height: 1px;
-    background: var(--signature);
-    opacity: 0.7;
 }
 .page-head > div:first-child { min-width: 0; }
 .page-head h1, .page-head h2 { margin: 0.4rem 0 0; }
@@ -595,7 +553,7 @@ code, .mono, .tabular, .num {
 }
 .entry {
     display: grid;
-    grid-template-columns: 3.2rem 1fr auto;
+    grid-template-columns: 2.4rem 1fr auto;
     gap: 0 1.4rem;
     align-items: baseline;
     padding: 1.4rem 0;
@@ -612,16 +570,14 @@ code, .mono, .tabular, .num {
 }
 .entry:hover .entry-title { color: var(--signature); }
 .entry-num {
-    font-family: var(--serif-display);
-    font-style: italic;
-    font-weight: 400;
-    font-size: 1.4rem;
-    color: var(--signature);
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: 0.75rem;
+    color: var(--ink-3);
     line-height: 1;
-    padding-top: 0.15rem;
-    font-variation-settings: "opsz" 60, "SOFT" 80;
+    padding-top: 0.65rem;
+    letter-spacing: 0.14em;
 }
-.entry-num::before { content: "Nº\00a0"; color: var(--ink-3); font-style: normal; font-family: var(--mono); font-size: 0.625rem; letter-spacing: 0.12em; text-transform: uppercase; vertical-align: 0.45em; }
 .entry-body { min-width: 0; }
 .entry-kicker {
     font-family: var(--mono);
@@ -1231,19 +1187,11 @@ td.col-num, th.col-num { text-align: right; }
    Colophon footer — quiet, dense, end-of-issue
    ════════════════════════════════════════════════════════════════════════════ */
 .qt-footer {
-    border-top: var(--rule-strong) solid var(--ink-1);
+    border-top: 1px solid var(--rule-2);
     margin-top: 3rem;
     padding: 1.6rem 1.5rem 2.2rem;
     background: var(--paper);
     position: relative;
-}
-.qt-footer::before {
-    content: "";
-    position: absolute;
-    left: 0; right: 0; top: 4px;
-    height: 1px;
-    background: var(--signature);
-    opacity: 0.6;
 }
 .qt-footer-inner {
     max-width: 1180px;
@@ -1411,7 +1359,6 @@ hr { border: 0; border-top: 1px solid var(--rule-2); opacity: 1; margin: 1.5rem 
     to   { transform: scaleX(1); transform-origin: left; }
 }
 .masthead { animation: lq-fade-up 380ms ease both; }
-.masthead::after { animation: lq-sweep 700ms 120ms ease both; }
 .hero > * { animation: lq-fade-up 540ms ease both; }
 .hero .eyebrow { animation-delay: 60ms; }
 .hero h1 { animation-delay: 120ms; }
@@ -1433,10 +1380,9 @@ hr { border: 0; border-top: 1px solid var(--rule-2); opacity: 1; margin: 1.5rem 
    ════════════════════════════════════════════════════════════════════════════ */
 @media (max-width: 720px) {
     .masthead-inner { padding: 0 1rem; }
-    .masthead-top { flex-wrap: wrap; gap: 0.4rem 1rem; }
-    .masthead-name .wordmark { font-size: 2.2rem; }
-    .masthead-tagline { font-size: 0.85rem; }
-    .masthead-nav-link { padding: 0.5rem 0.8rem; font-size: 0.85rem; }
+    .masthead-row { padding-bottom: 0.75rem; }
+    .masthead-name { font-size: 1.5rem; }
+    .masthead-nav-link { padding: 0.65rem 0.9rem; }
     .qt-shell { padding: 1.5rem 1rem 2rem; }
     .page-head { grid-template-columns: 1fr; }
 }

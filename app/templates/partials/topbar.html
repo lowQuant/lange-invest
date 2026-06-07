@@ -1,19 +1,15 @@
-{# ── Editorial masthead ─────────────────────────────────────────────────────
-   Replaces the old slim topbar + left sidebar combo with a single editorial
-   masthead: issue line on top, large serif wordmark in the middle, section
-   navigation in serif small-caps underneath, separated by hairlines. #}
+{# ── Masthead ───────────────────────────────────────────────────────────────
+   Quiet serif wordmark on the left, theme toggle + account on the right;
+   the section nav lives below on a single hairline strip. #}
 {% set _nav = nav_active or '' %}
 <header class="masthead">
     <div class="masthead-inner">
+        <div class="masthead-row">
+            <a href="/" class="masthead-name" aria-label="{{ site.name }} home">
+                <span class="wordmark-part">Lange</span><span class="wordmark-slash">&thinsp;/&thinsp;</span><span class="wordmark-part">Invest</span>
+            </a>
 
-        {# ── Top strip: issue line + theme + account ── #}
-        <div class="masthead-top">
-            <div class="masthead-top-left">
-                <span>Vol.&nbsp;I</span>
-                <span class="masthead-issue" id="masthead-date">—</span>
-                <span class="masthead-edition d-none d-md-inline">01</span>
-            </div>
-            <div class="masthead-top-right">
+            <div class="masthead-right">
                 <button class="theme-toggle" type="button" onclick="toggleTheme()"
                         title="Toggle reading mode" aria-label="Toggle reading mode">
                     <i class="bi bi-sun-fill"></i>
@@ -28,7 +24,7 @@
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li class="px-3 py-1 label-mono">{{ user.role }}</li>
                         {% if user.is_admin %}
-                        <li><a class="dropdown-item" href="/admin"><i class="bi bi-sliders"></i> Admin · Viewer</a></li>
+                        <li><a class="dropdown-item" href="/admin"><i class="bi bi-sliders"></i> Admin &middot; Viewer</a></li>
                         <li><hr class="dropdown-divider"></li>
                         {% endif %}
                         <li><form method="post" action="/logout">
@@ -42,14 +38,6 @@
             </div>
         </div>
 
-        {# ── Wordmark + tagline ── #}
-        <a href="/" class="masthead-name" aria-label="{{ site.name }} home">
-            <span class="mono-mark" aria-hidden="true">&lambda;</span>
-            <span class="wordmark">lange<span class="ampersand">&amp;</span>invest</span>
-        </a>
-        <p class="masthead-tagline">A quarterly journal of systematic strategies &mdash; published in the open.</p>
-
-        {# ── Section nav (lives under the wordmark, hairline-divided) ── #}
         <nav class="masthead-nav" aria-label="Sections">
             <a class="masthead-nav-link {% if _nav == 'articles' %}active{% endif %}"  href="/articles">Research</a>
             <a class="masthead-nav-link {% if _nav == 'equities' %}active{% endif %}"  href="/equities">Equities</a>
@@ -59,13 +47,3 @@
         </nav>
     </div>
 </header>
-<script>
-    // Render today's date as an editorial issue line.
-    (function () {
-        var el = document.getElementById('masthead-date');
-        if (!el) return;
-        var d = new Date();
-        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-        el.textContent = months[d.getMonth()] + '. ' + d.getDate() + ', ' + d.getFullYear();
-    })();
-</script>

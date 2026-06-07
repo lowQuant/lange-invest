@@ -3,7 +3,6 @@
 
 {% block content %}
 <section class="hero">
-    <span class="eyebrow">No. 01 &middot; The Manifesto</span>
     <h1>Rules-based strategies, <em>documented in the open.</em></h1>
     <p class="lead">
         Every strategy here is a fixed set of rules over a known universe &mdash; with its
@@ -11,7 +10,7 @@
         portfolio is public; the live book is a sign-in away.
     </p>
     <div class="hero-actions">
-        <a href="/equities" class="btn btn-primary btn-lg">Explore strategies &rarr;</a>
+        <a href="/portfolio" class="btn btn-primary btn-lg">See the portfolio &rarr;</a>
         <a href="/articles" class="btn btn-outline-secondary btn-lg">Read the research</a>
     </div>
 </section>
@@ -19,19 +18,17 @@
 <section>
     <div class="section-head">
         <h2>Strategies, by asset class</h2>
-        <span class="label-mono">{{ asset_classes | length }} books</span>
     </div>
     <div class="entries">
         {% for ac in asset_classes %}
         <a class="entry" href="/{{ ac.slug }}">
             <span class="entry-num">{{ '%02d' | format(loop.index) }}</span>
             <div class="entry-body">
-                <div class="entry-kicker"><i class="bi {{ ac.icon }}"></i>{{ ac.name }}</div>
+                <div class="entry-kicker"><i class="bi {{ ac.icon }}"></i>Asset class</div>
                 <h3 class="entry-title">{{ ac.name }}</h3>
                 <p class="entry-blurb">{{ ac.blurb }}</p>
             </div>
             <div class="entry-meta">
-                {% for v in ac.variants %}<span class="badge">{{ v.name }}</span>{% endfor %}
                 <span class="entry-arrow">read &mdash;&rarr;</span>
             </div>
         </a>

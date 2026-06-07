@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{{ variant.name }} · {{ asset_class.name }} — {{ site.name }}{% endblock %}
+{% block title %}{{ variant.name }} &middot; {{ asset_class.name }} &mdash; {{ site.name }}{% endblock %}
 {% block meta_description %}{{ variant.blurb }}{% endblock %}
 
 {% block content %}
 <div class="page-head">
     <div>
-        <span class="eyebrow"><i class="bi {{ asset_class.icon }}"></i> {{ asset_class.name }} · Strategy</span>
+        <span class="eyebrow"><i class="bi {{ asset_class.icon }}"></i> {{ asset_class.name }} &middot; Strategy</span>
         <h1>{{ variant.name }}</h1>
         <p class="lead">{{ variant.blurb }}</p>
     </div>
@@ -16,14 +16,16 @@
 
 {% include "partials/subnav.html" %}
 
-{# ── Headline stats ── #}
+{# ── Headline stats — inline numerical strip ── #}
 {% if snap and snap.stats %}
-<div class="mb-3">{% with stats = snap.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
+<div class="mb-4">{% with stats = snap.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
 {% endif %}
 
 {# ── Public chart (precomputed) ── #}
-<div class="qt-panel mb-3">
-    <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> {{ snap.chart.title if snap and snap.chart else 'Performance' }}</span></div>
+<section class="qt-panel mb-4">
+    <div class="qt-panel-head">
+        <span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> {{ snap.chart.title if snap and snap.chart else 'Performance' }}</span>
+    </div>
     <div class="qt-panel-body">
         {% if snap and snap.chart %}
             {% with chart_id = 'strat-chart', chart = snap.chart, subplots = snap.subplots %}
@@ -33,33 +35,24 @@
             <div class="alert alert-info mb-0">No published chart yet for this strategy. Snapshots are written by the precompute task.</div>
         {% endif %}
     </div>
-</div>
+</section>
 
-<div class="qt-grid" style="grid-template-columns: 2fr 1fr;">
-    {# ── Methodology ── #}
-    <div class="qt-panel">
-        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-journal-text"></i> Methodology</span></div>
-        <div class="qt-panel-body">
-            {% if variant.methodology %}
-            <p class="mb-0" style="line-height:1.7; color: var(--ink-1);">{{ variant.methodology }}</p>
-            {% else %}
-            <p class="mb-0" style="line-height:1.7;">{{ variant.blurb }}</p>
-            {% endif %}
-        </div>
+{# ── Methodology + Universe as an editorial two-column spread ── #}
+<section class="spread">
+    <div class="spread-col">
+        <h4><i class="bi bi-journal-text"></i> Methodology</h4>
+        <p>{{ variant.methodology or variant.blurb }}</p>
     </div>
 
-    {# ── Universe ── #}
-    <div class="qt-panel">
-        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-collection"></i> Universe</span></div>
-        <div class="qt-panel-body">
-            {% if snap and snap.universe %}
-            <div class="d-flex flex-wrap gap-1">
-                {% for sym in snap.universe %}<span class="badge bg-secondary">{{ sym }}</span>{% endfor %}
-            </div>
-            {% else %}
-            <p class="text-muted mb-0">Universe not published.</p>
-            {% endif %}
+    <div class="spread-col">
+        <h4><i class="bi bi-collection"></i> Universe</h4>
+        {% if snap and snap.universe %}
+        <div class="universe-pills">
+            {% for sym in snap.universe %}<span class="pill">{{ sym }}</span>{% endfor %}
         </div>
+        {% else %}
+        <p class="text-muted"><em>Universe not published.</em></p>
+        {% endif %}
     </div>
-</div>
+</section>
 {% endblock %}

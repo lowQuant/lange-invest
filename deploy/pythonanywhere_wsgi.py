@@ -28,16 +28,6 @@ if PROJECT_HOME not in sys.path:
 from dotenv import load_dotenv  # noqa: E402
 load_dotenv(Path(PROJECT_HOME) / ".env")
 
-# Adapt the FastAPI (ASGI) app to a WSGI callable named `application`.
-from a2wsgi import ASGIMiddleware  # noqa: E402
-from app.main import app as asgi_app  # noqa: E402
-
-application = ASGIMiddleware(asgi_app)
-
-# Connect ArcticDB once per worker so the first request isn't slow. Safe to skip —
-# the app also connects lazily on first use.
-try:
-    from app.engine import ensure_connected  # noqa: E402
-    ensure_connected()
-except Exception:
-    pass
+# Threadless ASGI->WSGI adapter (a2wsgi's background-thread model can hang under
+# PythonAnywhere's uWSGI). app.wsgi runs the ASGI app inline per request.
+from app.wsgi import application  # noqa: E402,F401

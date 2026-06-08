@@ -95,13 +95,16 @@
         <button class="fov-chip" data-sector="{{ sec.name }}">{{ sec.name }} <span class="fov-chip-n">{{ sec.markets | length }}</span></button>
         {% endfor %}
     </div>
-    <span class="fov-sep"></span>
-    <span class="ac-lbl">Trend</span>
-    <div class="fov-chip-group" id="fov-trend-chips">
-        <button class="fov-chip active" data-trend="all">All</button>
-        <button class="fov-chip" data-trend="up"><i class="bi bi-arrow-up-right"></i> Up</button>
-        <button class="fov-chip" data-trend="down"><i class="bi bi-arrow-down-right"></i> Down</button>
-        <button class="fov-chip" data-trend="neutral">Neutral</button>
+    {# Trend block kept together and pushed to the right so it lands at the row
+       edge when there's space, and right-aligned on its own line when wrapped. #}
+    <div class="fov-trend-block">
+        <span class="fov-sep"></span>
+        <span class="ac-lbl">Trend</span>
+        <div class="fov-chip-group" id="fov-trend-chips">
+            <button class="fov-chip active" data-trend="all">All</button>
+            <button class="fov-chip" data-trend="up"><i class="bi bi-arrow-up-right"></i> Up</button>
+            <button class="fov-chip" data-trend="down"><i class="bi bi-arrow-down-right"></i> Down</button>
+        </div>
     </div>
 </div>
 
@@ -346,6 +349,10 @@
     .fov-sep {
         width: 1px; height: 22px; background: var(--line-2);
         margin: 0 .3rem;
+    }
+    .fov-trend-block {
+        display: flex; align-items: center; gap: .5rem;
+        margin-left: auto;        /* push to the right edge of its row */
     }
 
     /* Trend table */
@@ -697,7 +704,6 @@
         if (filters.sector !== "all" && sector !== filters.sector) return false;
         if (filters.trend === "up" && sigStr !== "1") return false;
         if (filters.trend === "down" && sigStr !== "-1") return false;
-        if (filters.trend === "neutral" && sigStr !== "0" && sigStr !== "") return false;
         return true;
     }
     function applyFilters() {

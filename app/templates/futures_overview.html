@@ -31,10 +31,13 @@
         <button class="fov-tab" data-mode="term" role="tab"
                 onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term structure</button>
     </div>
-    <span class="label-mono fov-hint"><span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span></span>
+    <span class="label-mono fov-hint">
+        <span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span>
+        <span id="fov-load-state" class="fov-loading">&middot; loading data&hellip;</span>
+    </span>
 </div>
 
-{# ── Trend summary table ──────────────────────────────────────────────────── #}
+{# ── Trend summary table (hydrated by JS once payload arrives) ────────────── #}
 <div class="qt-panel mb-4">
     <div class="qt-panel-head">
         <span class="qt-panel-head-title"><i class="bi bi-table"></i> Trend dashboard</span>
@@ -44,40 +47,25 @@
         <table class="table table-sm mb-0 fov-table">
             <thead>
                 <tr>
-                    <th class="fov-sortable" data-key="symbol" data-dir="asc">Symbol <i class="bi bi-caret-down-fill"></i></th>
+                    <th class="fov-sortable sort-asc" data-key="symbol" data-dir="asc">Symbol <i class="bi bi-caret-down-fill"></i></th>
                     <th class="fov-sortable" data-key="name">Name</th>
                     <th class="fov-sortable" data-key="sector">Sector</th>
                     <th class="fov-sortable text-end" data-key="last">Last</th>
-                    <th class="fov-sortable text-end" data-key="trend_pct">vs EMA(100)</th>
+                    <th class="fov-sortable text-end" data-key="trend">vs EMA(100)</th>
                     <th>Trend</th>
                 </tr>
             </thead>
             <tbody id="fov-tbody">
                 {% for r in rows %}
                 <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
-                    data-last="{{ r.last if r.last is not none else '' }}"
-                    data-trend="{{ '%.6f' % r.trend_pct if r.trend_pct is not none else '' }}"
+                    data-last="" data-trend=""
                     onclick="scrollToCard('{{ r.symbol }}')">
                     <td class="fov-sym">{{ r.symbol }}</td>
                     <td>{{ r.name }}</td>
                     <td><span class="fov-chip">{{ r.sector }}</span></td>
-                    <td class="num text-end">{% if r.last is not none %}{{ "%.4g" | format(r.last) }}{% else %}&mdash;{% endif %}</td>
-                    <td class="num text-end">
-                        {% if r.trend_pct is not none %}
-                            <span class="{{ 'text-up' if r.trend_pct >= 0 else 'text-down' }}">
-                                {{ "%+.2f%%" | format(r.trend_pct * 100) }}
-                            </span>
-                        {% else %}&mdash;{% endif %}
-                    </td>
-                    <td>
-                        {% if r.trend_pct is none %}
-                            <span class="fov-trend muted">&mdash;</span>
-                        {% elif r.trend_pct >= 0 %}
-                            <span class="fov-trend up"><i class="bi bi-arrow-up-right"></i> up</span>
-                        {% else %}
-                            <span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>
-                        {% endif %}
-                    </td>
+                    <td class="num text-end fov-cell-last">&mdash;</td>
+                    <td class="num text-end fov-cell-trendpct">&mdash;</td>
+                    <td class="fov-cell-trend"><span class="fov-trend muted">&mdash;</span></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -90,34 +78,30 @@
 <section class="fov-sector">
     <div class="fov-sector-head">
         <h2>{{ sec.name }}</h2>
-        <span class="label-mono">{{ sec.items | length }} market{% if (sec.items | length) != 1 %}s{% endif %}</span>
+        <span class="label-mono">{{ sec.markets | length }} market{% if (sec.markets | length) != 1 %}s{% endif %}</span>
     </div>
     <div class="fov-grid">
-        {% for r in sec.items %}
-        <article class="fov-card" id="card-{{ r.symbol }}">
+        {% for r in sec.markets %}
+        <article class="fov-card" id="card-{{ r.symbol }}" data-symbol="{{ r.symbol }}">
             <header class="fov-card-head">
                 <div>
                     <span class="fov-card-sym">{{ r.symbol }}</span>
                     <span class="fov-card-name">{{ r.name }}</span>
                 </div>
-                {% if r.trend_pct is not none %}
-                    <span class="fov-card-trend {{ 'up' if r.trend_pct >= 0 else 'down' }}">
-                        {{ "%+.2f%%" | format(r.trend_pct * 100) }}
-                    </span>
-                {% endif %}
+                <span class="fov-card-trend muted">&mdash;</span>
             </header>
             <div class="fov-card-meta">
                 {% if r.exchange %}<span>{{ r.exchange }}</span>{% endif %}
                 {% if r.currency %}<span>{{ r.currency }}</span>{% endif %}
-                {% if r.last is not none %}
-                    <span class="num">last <strong>{{ "%.4g" | format(r.last) }}</strong></span>
-                {% endif %}
+                <span class="fov-card-last num"></span>
             </div>
             <div class="fov-canvas-wrap">
-                <canvas id="chart-{{ r.symbol }}"></canvas>
+                <div class="fov-skeleton">
+                    <div class="spinner-border spinner-border-sm"></div>
+                    <span class="label-mono ms-2">loading&hellip;</span>
+                </div>
+                <canvas id="chart-{{ r.symbol }}" style="display:none;"></canvas>
             </div>
-            {% if r.curve_chart %}<script type="application/json" id="data-curve-{{ r.symbol }}">{{ r.curve_chart | tojson }}</script>{% endif %}
-            {% if r.term_chart %}<script type="application/json" id="data-term-{{ r.symbol }}">{{ r.term_chart | tojson }}</script>{% endif %}
         </article>
         {% endfor %}
     </div>
@@ -151,6 +135,8 @@
     .fov-tab.active { color: var(--ink-1); background: var(--bg-3); }
     .fov-tab .bi { font-size: .85rem; color: var(--signature); }
     .fov-hint { color: var(--ink-4); }
+    .fov-loading { color: var(--signature); }
+    .fov-loading.done { display: none; }
 
     /* Trend table */
     .fov-table { font-size: .8125rem; }
@@ -227,6 +213,7 @@
     }
     .fov-card-trend.up { color: var(--up); }
     .fov-card-trend.down { color: var(--down); }
+    .fov-card-trend.muted { color: var(--ink-4); }
     .fov-card-meta {
         display: flex; gap: .75rem;
         font-family: var(--mono); font-size: .65rem;
@@ -235,34 +222,94 @@
     }
     .fov-card-meta strong { color: var(--ink-1); font-weight: 500; }
     .fov-canvas-wrap { position: relative; height: 170px; }
+    .fov-skeleton {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--ink-4); background: var(--bg-2);
+        border-radius: 4px;
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', path='js/charts.js') }}"></script>
 <script>
 (function () {
     let currentMode = "curve";
-    const charts = new Map();   // canvasId → Chart instance
+    let payload = null;                  // {symbol: {last, trend_pct, curve_chart, term_chart}}
+    const charts = new Map();            // canvasId → Chart instance
 
-    function mountAll(mode) {
-        // Destroy any currently mounted gallery charts and re-render the
-        // requested mode. We use LangeChart.render (not .mount) so our charts
-        // do NOT enter the global theme-redraw registry — this page owns its
-        // own themechange handler and would otherwise double-fire.
+    function destroyAll() {
         charts.forEach(c => { try { c.destroy(); } catch (e) {} });
         charts.clear();
         if (window._langeCharts) {
             window._langeCharts = window._langeCharts.filter(c =>
                 !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("chart-"));
         }
-        document.querySelectorAll(".fov-canvas-wrap canvas").forEach(canvas => {
-            const sym = canvas.id.replace(/^chart-/, "");
-            const tag = document.getElementById("data-" + mode + "-" + sym);
-            if (!tag) return;
-            let data;
-            try { data = JSON.parse(tag.textContent); } catch (e) { return; }
+    }
+
+    function mountAll(mode) {
+        destroyAll();
+        if (!payload) return;
+        document.querySelectorAll(".fov-card").forEach(card => {
+            const sym = card.dataset.symbol;
+            const entry = payload[sym]; if (!entry) return;
+            const data = mode === "term" ? entry.term_chart : entry.curve_chart;
+            const canvas = card.querySelector("canvas"); if (!canvas || !data) return;
+            const skel = card.querySelector(".fov-skeleton"); if (skel) skel.style.display = "none";
+            canvas.style.display = "";
             const ch = LangeChart.render(canvas.id, data, { isMain: true });
             if (ch) charts.set(canvas.id, ch);
         });
+    }
+
+    function fmt4g(v) {
+        if (v == null || !isFinite(v)) return "—";
+        const a = Math.abs(v);
+        if (a >= 1000) return v.toFixed(0);
+        if (a >= 1) return v.toFixed(2);
+        return v.toPrecision(4);
+    }
+
+    function hydrateTableAndCards() {
+        if (!payload) return;
+        document.querySelectorAll("#fov-tbody tr").forEach(tr => {
+            const sym = tr.dataset.sym;
+            const entry = payload[sym]; if (!entry) return;
+            const last = entry.last, tp = entry.trend_pct;
+            if (last != null) {
+                tr.dataset.last = String(last);
+                tr.querySelector(".fov-cell-last").textContent = fmt4g(last);
+            }
+            if (tp != null) {
+                tr.dataset.trend = String(tp);
+                const pct = (tp * 100).toFixed(2) + "%";
+                const sign = tp >= 0 ? "+" : "";
+                const cell = tr.querySelector(".fov-cell-trendpct");
+                cell.textContent = sign + pct;
+                cell.classList.add(tp >= 0 ? "text-up" : "text-down");
+                const badge = tr.querySelector(".fov-cell-trend");
+                badge.innerHTML = tp >= 0
+                    ? '<span class="fov-trend up"><i class="bi bi-arrow-up-right"></i> up</span>'
+                    : '<span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>';
+            }
+        });
+        // Card headers
+        document.querySelectorAll(".fov-card").forEach(card => {
+            const sym = card.dataset.symbol;
+            const entry = payload[sym]; if (!entry) return;
+            const tp = entry.trend_pct;
+            const trEl = card.querySelector(".fov-card-trend");
+            if (tp != null) {
+                trEl.textContent = (tp >= 0 ? "+" : "") + (tp * 100).toFixed(2) + "%";
+                trEl.classList.remove("muted");
+                trEl.classList.add(tp >= 0 ? "up" : "down");
+            }
+            if (entry.last != null) {
+                const lastEl = card.querySelector(".fov-card-last");
+                if (lastEl) lastEl.innerHTML = "last <strong>" + fmt4g(entry.last) + "</strong>";
+            }
+        });
+        // Default sort within each sector card group: by trend desc
+        sortTable("trend", "desc");
     }
 
     window.setMode = function (mode) {
@@ -288,7 +335,7 @@
     function sortTable(key, dir) {
         const tbody = document.getElementById("fov-tbody");
         const rows = Array.from(tbody.querySelectorAll("tr"));
-        const numeric = key === "last" || key === "trend_pct";
+        const numeric = key === "last" || key === "trend";
         const attr = key === "symbol" ? "sym"
                    : key === "name"   ? "name"
                    : key === "sector" ? "sector"
@@ -304,28 +351,46 @@
             return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
         });
         rows.forEach(r => tbody.appendChild(r));
+        document.querySelectorAll(".fov-sortable").forEach(t => {
+            t.dataset.dir = ""; t.classList.remove("sort-asc", "sort-desc");
+            if (t.dataset.key === key) {
+                t.dataset.dir = dir;
+                t.classList.add(dir === "asc" ? "sort-asc" : "sort-desc");
+            }
+        });
     }
     document.querySelectorAll(".fov-sortable").forEach(th => {
         th.addEventListener("click", () => {
             const key = th.dataset.key;
-            const curr = th.dataset.dir || (key === "trend_pct" ? "desc" : "asc");
+            const curr = th.dataset.dir || (key === "trend" ? "desc" : "asc");
             const next = curr === "asc" ? "desc" : "asc";
-            document.querySelectorAll(".fov-sortable").forEach(t => {
-                t.dataset.dir = ""; t.classList.remove("sort-asc", "sort-desc");
-            });
-            th.dataset.dir = next;
-            th.classList.add(next === "asc" ? "sort-asc" : "sort-desc");
             sortTable(key, next);
         });
     });
 
-    // ── Initial mount + theme handling ──
-    function init() {
-        if (!window.Chart || !window.LangeChart) return setTimeout(init, 50);
-        mountAll(currentMode);
+    // ── Async payload fetch + mount ──
+    function loadPayload() {
+        fetch("/futures/api/payload", { headers: { "Accept": "application/json" } })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+            .then(p => {
+                payload = p;
+                document.getElementById("fov-load-state").classList.add("done");
+                hydrateTableAndCards();
+                if (window.Chart && window.LangeChart) mountAll(currentMode);
+                else {
+                    const wait = () => (window.Chart && window.LangeChart) ? mountAll(currentMode) : setTimeout(wait, 50);
+                    wait();
+                }
+            })
+            .catch(err => {
+                const el = document.getElementById("fov-load-state");
+                el.classList.remove("fov-loading");
+                el.textContent = "· could not load chart data: " + err.message;
+                el.style.color = "var(--down)";
+            });
     }
-    init();
-    document.addEventListener("themechange", () => setTimeout(() => mountAll(currentMode), 30));
+    loadPayload();
+    document.addEventListener("themechange", () => { if (payload) setTimeout(() => mountAll(currentMode), 30); });
 })();
 </script>
 {% endif %}

@@ -7,7 +7,7 @@ embedded as HTMX fragments that fall back to an access wall — see app.routes.g
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from app import articles as articles_mod
 from app import futures_overview
@@ -105,13 +105,17 @@ async def sitemap(request: Request):
 # overview (sector-grouped continuous curves + term structures + trend table)
 # instead of the generic asset-class landing. Declared BEFORE the /{ac_slug}
 # catch-all so this route wins.
+#
+# Two-stage render: the page itself only reads metadata (one universe + one
+# symbol list) so it appears instantly. The chart payload is fetched async
+# via /futures/api/payload and cached server-side after first hit.
 @router.get("/futures", response_class=HTMLResponse)
 async def futures_overview_page(request: Request):
     cfg = get_config()
     ac = cfg.asset_class("futures")
     if ac is None:
         raise HTTPException(status_code=404)
-    data = futures_overview.build_overview()
+    data = futures_overview.build_meta()
     return render(
         request,
         "futures_overview.html",
@@ -121,6 +125,12 @@ async def futures_overview_page(request: Request):
         rows=data["rows"],
         error=data["error"],
     )
+
+
+@router.get("/futures/api/payload")
+async def futures_overview_payload():
+    """Per-symbol chart data + trend metric, cached. Hydrates the /futures shell."""
+    return JSONResponse(futures_overview.build_chart_payload())
 
 
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────

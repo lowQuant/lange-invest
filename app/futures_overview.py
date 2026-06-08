@@ -10,7 +10,6 @@ Cached in-process — invalidate via ``invalidate_cache()`` after a fresh write.
 """
 from __future__ import annotations
 
-import math
 from typing import Any
 
 import pandas as pd
@@ -20,11 +19,13 @@ from app import public_access
 from app.engine import ensure_connected
 
 
-_OVERVIEW_CACHE: dict[str, Any] = {}
+_META_CACHE: dict[str, Any] = {}
+_CHART_CACHE: dict[str, Any] = {}
 
 
 def invalidate_cache() -> None:
-    _OVERVIEW_CACHE.clear()
+    _META_CACHE.clear()
+    _CHART_CACHE.clear()
 
 
 # ── universe/Futures metadata ────────────────────────────────────────────────
@@ -126,12 +127,17 @@ def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
     }
 
 
-# ── Top-level builder ────────────────────────────────────────────────────────
+# ── Top-level builders ───────────────────────────────────────────────────────
 
-def build_overview() -> dict[str, Any]:
-    """Sector-grouped view model for the /futures page. Cached in-process."""
-    if "data" in _OVERVIEW_CACHE:
-        return _OVERVIEW_CACHE["data"]
+def build_meta() -> dict[str, Any]:
+    """Lightweight shell data for /futures: sector groups with metadata only.
+
+    Cheap: one read of universe/Futures + one list of `futures` symbols. No
+    per-symbol chart payloads, so the page renders instantly; JS then fetches
+    /futures/api/payload to fill in trend numbers and mount the charts.
+    """
+    if "data" in _META_CACHE:
+        return _META_CACHE["data"]
 
     if not ensure_connected():
         return {"sectors": [], "rows": [], "error": "The data engine is not connected in this environment."}
@@ -144,9 +150,6 @@ def build_overview() -> dict[str, Any]:
     uni = _read_universe_futures()
     rows: list[dict[str, Any]] = []
     for s in symbols:
-        data = _compute_for_symbol(s)
-        if data is None:
-            continue
         meta = uni.get(s.upper(), {})
         rows.append({
             "symbol": s,
@@ -154,22 +157,50 @@ def build_overview() -> dict[str, Any]:
             "sector": str(meta.get("sector") or "Other"),
             "exchange": str(meta.get("exchange") or ""),
             "currency": str(meta.get("currency") or ""),
-            "last": data["last"],
-            "trend_pct": data["trend_pct"],
-            "curve_chart": data["curve_chart"],
-            "term_chart": data["term_chart"],
         })
 
     sectors: dict[str, list[dict[str, Any]]] = {}
     for r in rows:
         sectors.setdefault(r["sector"], []).append(r)
     for items in sectors.values():
-        items.sort(key=lambda r: (r["trend_pct"] if r["trend_pct"] is not None else -math.inf), reverse=True)
+        items.sort(key=lambda r: r["symbol"])
 
     out = {
-        "sectors": [{"name": sec, "items": sectors[sec]} for sec in sorted(sectors)],
+        "sectors": [{"name": sec, "markets": sectors[sec]} for sec in sorted(sectors)],
         "rows": rows,
         "error": None,
     }
-    _OVERVIEW_CACHE["data"] = out
+    _META_CACHE["data"] = out
+    return out
+
+
+def build_chart_payload() -> dict[str, Any]:
+    """Per-symbol chart payloads — heavy first hit, cached per process.
+
+    Returns ``{symbol: {last, trend_pct, curve_chart, term_chart}}`` for every
+    chartable symbol in the futures library.
+    """
+    if "data" in _CHART_CACHE:
+        return _CHART_CACHE["data"]
+
+    if not ensure_connected():
+        return {}
+
+    try:
+        symbols = sorted(public_access.list_symbols("futures"))
+    except Exception:  # noqa: BLE001
+        return {}
+
+    out: dict[str, Any] = {}
+    for s in symbols:
+        data = _compute_for_symbol(s)
+        if data is None:
+            continue
+        out[s] = {
+            "last": data["last"],
+            "trend_pct": data["trend_pct"],
+            "curve_chart": data["curve_chart"],
+            "term_chart": data["term_chart"],
+        }
+    _CHART_CACHE["data"] = out
     return out

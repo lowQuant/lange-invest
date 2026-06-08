@@ -28,7 +28,9 @@ from app.engine import ensure_connected
 
 
 _META_CACHE: dict[str, Any] = {}
-_CHART_CACHE: dict[str, Any] = {}
+# Per-symbol payload cache. Negative results (unusable curves) are cached as
+# ``None`` so we don't retry the expensive read on every page refresh.
+_CHART_CACHE: dict[str, dict[str, Any] | None] = {}
 
 # Column-name aliases — production may use any of these.
 SECTOR_COLS = ("asset_class", "sector", "category", "assetClass")
@@ -96,12 +98,14 @@ def _meta_for(sym: str, uni: dict[str, dict[str, Any]]) -> dict[str, Any]:
         mult = float(mult) if mult is not None else None
     except (TypeError, ValueError):
         mult = None
+    name = str(_first(meta, NAME_COLS) or sym)
     return {
-        "name": str(_first(meta, NAME_COLS) or sym),
+        "name": name,
         "sector": str(sector),
         "exchange": str(meta.get("exchange") or ""),
         "currency": str(meta.get("currency") or ""),
         "multiplier": mult,
+        "is_micro": "micro" in name.lower(),
     }
 
 
@@ -298,6 +302,7 @@ def build_meta() -> dict[str, Any]:
             "exchange": meta["exchange"],
             "currency": meta["currency"],
             "multiplier": meta["multiplier"],
+            "is_micro": meta["is_micro"],
         })
 
     sectors: dict[str, list[dict[str, Any]]] = {}
@@ -315,11 +320,39 @@ def build_meta() -> dict[str, Any]:
     return out
 
 
-def build_chart_payload() -> dict[str, Any]:
-    """Per-symbol chart payloads + trend + ATR — heavy first hit, cached."""
-    if "data" in _CHART_CACHE:
-        return _CHART_CACHE["data"]
+def _payload_entry_for(symbol: str, uni: dict[str, dict[str, Any]]) -> dict[str, Any] | None:
+    """Compute or fetch the per-symbol payload entry, using the per-symbol
+    cache so a later ``subset='all'`` request only computes the rest.
+    """
+    if symbol in _CHART_CACHE:
+        return _CHART_CACHE[symbol]
+    data = _compute_for_symbol(symbol)
+    if data is None:
+        _CHART_CACHE[symbol] = None
+        return None
+    meta = _meta_for(symbol, uni)
+    entry: dict[str, Any] = {
+        "last": data["last"],
+        "trend_pct": data["trend_pct"],
+        "trend_signal": data["trend_signal"],
+        "atr100": data["atr100"],
+        "multiplier": meta["multiplier"],
+        "is_micro": meta["is_micro"],
+        "curve_chart": data["curve_chart"],
+        "term_chart": data["term_chart"],
+    }
+    _CHART_CACHE[symbol] = entry
+    return entry
 
+
+def build_chart_payload(subset: str = "all") -> dict[str, Any]:
+    """Per-symbol chart payloads + trend + ATR.
+
+    ``subset='micro'`` computes only the markets whose universe ``name``
+    contains "micro" — much cheaper on cold start, used as the default page
+    load. ``subset='all'`` fills in the rest. Per-symbol cache means asking
+    for ``'all'`` after ``'micro'`` only does the incremental work.
+    """
     if not ensure_connected():
         return {}
 
@@ -329,20 +362,12 @@ def build_chart_payload() -> dict[str, Any]:
         return {}
 
     uni = _read_universe_futures()
+    if subset == "micro":
+        symbols = [s for s in symbols if _meta_for(s, uni)["is_micro"]]
+
     out: dict[str, Any] = {}
     for s in symbols:
-        data = _compute_for_symbol(s)
-        if data is None:
-            continue
-        meta = _meta_for(s, uni)
-        out[s] = {
-            "last": data["last"],
-            "trend_pct": data["trend_pct"],
-            "trend_signal": data["trend_signal"],
-            "atr100": data["atr100"],
-            "multiplier": meta["multiplier"],
-            "curve_chart": data["curve_chart"],
-            "term_chart": data["term_chart"],
-        }
-    _CHART_CACHE["data"] = out
+        entry = _payload_entry_for(s, uni)
+        if entry is not None:
+            out[s] = entry
     return out

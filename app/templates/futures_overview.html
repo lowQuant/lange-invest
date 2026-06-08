@@ -39,8 +39,14 @@
     </span>
 </div>
 
-{# ── Filter chips: sector + trend (apply across all tabs) ─────────────────── #}
+{# ── Filter chips: size + sector + trend (apply across all tabs) ──────────── #}
 <div class="fov-filters" id="fov-filters">
+    <span class="ac-lbl">Size</span>
+    <div class="fov-chip-group" id="fov-size-chips">
+        <button class="fov-chip active" data-size="micro">Micro</button>
+        <button class="fov-chip" data-size="all">All</button>
+    </div>
+    <span class="fov-sep"></span>
     <span class="ac-lbl">Sector</span>
     <div class="fov-chip-group" id="fov-sector-chips">
         <button class="fov-chip active" data-sector="all">All</button>
@@ -79,8 +85,9 @@
             <tbody id="fov-tbody">
                 {% for r in rows %}
                 <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
+                    data-is-micro="{{ '1' if r.is_micro else '0' }}"
                     data-trend-signal="" data-last="" data-trend=""
-                    onclick="scrollToCard('{{ r.symbol }}')">
+                    onclick="rowClick('{{ r.symbol }}')">
                     <td class="fov-sym">{{ r.symbol }}</td>
                     <td>{{ r.name }}</td>
                     <td><span class="fov-chip-pill">{{ r.sector }}</span></td>
@@ -105,7 +112,8 @@
     <div class="fov-grid">
         {% for r in sec.markets %}
         <article class="fov-card" id="card-{{ r.symbol }}"
-                 data-symbol="{{ r.symbol }}" data-sector="{{ r.sector }}" data-trend-signal="">
+                 data-symbol="{{ r.symbol }}" data-sector="{{ r.sector }}"
+                 data-is-micro="{{ '1' if r.is_micro else '0' }}" data-trend-signal="">
             <header class="fov-card-head">
                 <div>
                     <span class="fov-card-sym">{{ r.symbol }}</span>
@@ -172,7 +180,13 @@
     <div class="qt-panel">
         <div class="qt-panel-head">
             <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Sized portfolio</span>
-            <span class="label-mono" id="sim-totals" style="color:var(--ink-3);"></span>
+            <span class="d-flex align-items-center gap-2">
+                <span class="label-mono" id="sim-selection" style="display:none;">
+                    <span id="sim-selection-n">0</span> selected ·
+                    <a href="#" onclick="clearSelection();return false;" style="color:var(--signature);text-decoration:none;">clear</a>
+                </span>
+                <span class="label-mono" id="sim-totals" style="color:var(--ink-3);"></span>
+            </span>
         </div>
         <div class="qt-panel-body dense" style="padding:0;">
             <table class="table table-sm mb-0 fov-table sim-table">
@@ -278,6 +292,19 @@
     .fov-table tbody tr { cursor: pointer; transition: background .12s; }
     .fov-table tbody tr:hover { background: var(--bg-2); }
     .fov-table tbody tr.hidden { display: none; }
+    /* Selected rows persist across modes; clicking a row in the sim tab
+       toggles the state and the selection becomes the sim universe. */
+    .fov-table tbody tr.fov-selected {
+        background: var(--signature-dim);
+        box-shadow: inset 3px 0 0 0 var(--signature);
+    }
+    .fov-table tbody tr.fov-selected:hover {
+        background: var(--signature-dim);
+    }
+    .fov-card.fov-selected {
+        border-color: var(--signature);
+        box-shadow: 0 0 0 1px var(--signature);
+    }
     .fov-sortable { cursor: pointer; user-select: none; }
     .fov-sortable:hover { color: var(--ink-1); }
     .fov-sortable .bi { opacity: .35; font-size: .65rem; margin-left: .15rem; }
@@ -410,9 +437,12 @@
 (function () {
     // ── State ──
     let mode = "curve";                  // curve | term | sim
-    let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, curve_chart, term_chart}}
+    let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, is_micro, curve_chart, term_chart}}
+    let loadedSubset = "micro";          // which subset of the payload we've fetched
+    let allFetchInflight = null;         // Promise while expanding "all"
     const charts = new Map();
-    const filters = { sector: "all", trend: "all" };
+    const filters = { size: "micro", sector: "all", trend: "all" };
+    const selected = new Set();          // user-picked rows for the sim universe
 
     // ── Helpers ──
     function fmt4g(v) {
@@ -468,20 +498,23 @@
         return '<span class="fov-trend neutral">neutral</span>';
     }
     function pruneMissing() {
-        // Remove rows/cards for symbols the server filtered out (no usable
-        // data, sparse-roll micro-contracts, etc.) so they don't sit as
-        // empty dashes forever.
+        // Remove rows/cards the server definitively rejected (unusable curve,
+        // sparse-roll micro, etc.). When we've only fetched ``subset='micro'``
+        // we know nothing about non-micros yet — leave them in place; they'll
+        // hydrate or be pruned after the 'all' fetch.
         if (!payload) return;
+        const isResolved = (el) =>
+            loadedSubset === "all" ||
+            (loadedSubset === "micro" && el.dataset.isMicro === "1");
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
-            if (!payload[tr.dataset.sym]) tr.remove();
+            if (!payload[tr.dataset.sym] && isResolved(tr)) tr.remove();
         });
         document.querySelectorAll(".fov-card").forEach(card => {
-            if (!payload[card.dataset.symbol]) card.remove();
+            if (!payload[card.dataset.symbol] && isResolved(card)) card.remove();
         });
         document.querySelectorAll(".fov-sector").forEach(sec => {
             if (!sec.querySelector(".fov-card")) sec.remove();
         });
-        // Update the page-head counters in place.
         const rows = document.querySelectorAll("#fov-tbody tr").length;
         const secs = document.querySelectorAll(".fov-sector").length;
         const minis = document.querySelectorAll(".page-head .metric-mini .v");
@@ -530,7 +563,11 @@
     }
 
     // ── Filter application ──
-    function passes(sector, sigStr) {
+    function passes(el) {
+        const sector = el.dataset.sector;
+        const sigStr = el.dataset.trendSignal || "";
+        const isMicro = el.dataset.isMicro === "1";
+        if (filters.size === "micro" && !isMicro) return false;
         if (filters.sector !== "all" && sector !== filters.sector) return false;
         if (filters.trend === "up" && sigStr !== "1") return false;
         if (filters.trend === "down" && sigStr !== "-1") return false;
@@ -540,13 +577,11 @@
     function applyFilters() {
         // table rows
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
-            const ok = passes(tr.dataset.sector, tr.dataset.trendSignal || "");
-            tr.classList.toggle("hidden", !ok);
+            tr.classList.toggle("hidden", !passes(tr));
         });
         // cards
         document.querySelectorAll(".fov-card").forEach(card => {
-            const ok = passes(card.dataset.sector, card.dataset.trendSignal || "");
-            card.classList.toggle("hidden", !ok);
+            card.classList.toggle("hidden", !passes(card));
         });
         // sectors: hide empty
         document.querySelectorAll(".fov-sector").forEach(sec => {
@@ -575,6 +610,52 @@
             applyFilters();
         });
     });
+    document.querySelectorAll("#fov-size-chips .fov-chip").forEach(b => {
+        b.addEventListener("click", async () => {
+            document.querySelectorAll("#fov-size-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            b.classList.add("active");
+            filters.size = b.dataset.size;
+            // First time the user opens up to "all" we need to fetch the rest
+            // of the universe — micros are already in the payload.
+            if (filters.size === "all" && loadedSubset === "micro") {
+                await loadFullPayload();
+            }
+            applyFilters();
+        });
+    });
+
+    // ── Selection (sim universe) ──
+    function updateSelectionUI() {
+        const n = selected.size;
+        const sel = document.getElementById("sim-selection");
+        if (sel) {
+            sel.style.display = n > 0 ? "" : "none";
+            const numEl = document.getElementById("sim-selection-n");
+            if (numEl) numEl.textContent = String(n);
+        }
+    }
+    function toggleSelected(sym) {
+        if (selected.has(sym)) selected.delete(sym); else selected.add(sym);
+        const tr = document.querySelector(`#fov-tbody tr[data-sym="${sym}"]`);
+        const card = document.getElementById("card-" + sym);
+        if (tr) tr.classList.toggle("fov-selected", selected.has(sym));
+        if (card) card.classList.toggle("fov-selected", selected.has(sym));
+        updateSelectionUI();
+        if (mode === "sim") renderSim();
+    }
+    window.clearSelection = function () {
+        selected.clear();
+        document.querySelectorAll(".fov-selected").forEach(el => el.classList.remove("fov-selected"));
+        updateSelectionUI();
+        if (mode === "sim") renderSim();
+    };
+    window.rowClick = function (sym) {
+        // In sim mode a click picks the row for the universe. In chart modes
+        // it still scrolls to the matching card — clicks below the cards do
+        // nothing useful in those modes.
+        if (mode === "sim") toggleSelected(sym);
+        else                scrollToCard(sym);
+    };
 
     // ── Mode switching ──
     window.setMode = function (m) {
@@ -657,12 +738,14 @@
             return;
         }
         const targetDaily = risk * equity;
-        // Universe = visible rows after filters
-        const visibleSyms = new Set(
-            Array.from(document.querySelectorAll("#fov-tbody tr"))
-                 .filter(tr => !tr.classList.contains("hidden"))
-                 .map(tr => tr.dataset.sym)
-        );
+        // Universe = explicit selection if any, otherwise the visible filtered set.
+        const visibleSyms = selected.size > 0
+            ? new Set(selected)
+            : new Set(
+                Array.from(document.querySelectorAll("#fov-tbody tr"))
+                     .filter(tr => !tr.classList.contains("hidden"))
+                     .map(tr => tr.dataset.sym)
+            );
         const rows = [];
         let totalNotional = 0, totalRisk = 0, used = 0;
         Object.keys(payload).forEach(sym => {
@@ -748,13 +831,25 @@
         if (isFinite(n) && n > 0) eqEl.value = Math.round(n).toLocaleString("en-US");
     });
 
-    // ── Async payload fetch ──
+    // ── Async payload fetch (two-stage: micros first, all on demand) ──
+    function setLoadState(text, kind) {
+        const el = document.getElementById("fov-load-state");
+        if (!el) return;
+        if (text == null) { el.classList.add("done"); return; }
+        el.classList.remove("done");
+        el.textContent = text;
+        el.style.color = kind === "error" ? "var(--down)"
+                       : kind === "warm"  ? "var(--ink-4)"
+                                          : "var(--signature)";
+    }
     function loadPayload() {
-        fetch("/futures/api/payload", { headers: { "Accept": "application/json" } })
+        setLoadState("· loading micro contracts…", "loading");
+        fetch("/futures/api/payload?subset=micro", { headers: { "Accept": "application/json" } })
             .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
             .then(p => {
                 payload = p;
-                document.getElementById("fov-load-state").classList.add("done");
+                loadedSubset = "micro";
+                setLoadState(null);
                 hydrate();
                 applyFilters();
                 if (window.Chart && window.LangeChart) {
@@ -766,12 +861,25 @@
                     wait();
                 }
             })
-            .catch(err => {
-                const el = document.getElementById("fov-load-state");
-                el.classList.remove("fov-loading");
-                el.textContent = "· could not load chart data: " + err.message;
-                el.style.color = "var(--down)";
-            });
+            .catch(err => setLoadState("· could not load chart data: " + err.message, "error"));
+    }
+    async function loadFullPayload() {
+        if (loadedSubset === "all") return;
+        if (allFetchInflight) return allFetchInflight;
+        setLoadState("· expanding to all markets…", "loading");
+        allFetchInflight = fetch("/futures/api/payload?subset=all", { headers: { "Accept": "application/json" } })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+            .then(p => {
+                payload = Object.assign({}, payload, p);
+                loadedSubset = "all";
+                setLoadState(null);
+                hydrate();
+                applyFilters();
+                if (mode !== "sim") mountCharts(mode);
+            })
+            .catch(err => setLoadState("· could not expand to all markets: " + err.message, "error"))
+            .finally(() => { allFetchInflight = null; });
+        return allFetchInflight;
     }
     loadPayload();
     document.addEventListener("themechange", () => { if (payload && mode !== "sim") setTimeout(() => mountCharts(mode), 30); });

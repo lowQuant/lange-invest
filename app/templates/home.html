@@ -12,7 +12,11 @@
             This is where I build my own. A collection of ideas. A database. A track record.
         </p>
         <div class="hero-actions">
+            {% if user and user.is_admin %}
             <a href="/portfolio" class="btn btn-primary btn-lg">See the portfolio &rarr;</a>
+            {% else %}
+            <a href="/futures" class="btn btn-primary btn-lg">Explore the futures complex &rarr;</a>
+            {% endif %}
             <a href="/articles" class="btn btn-outline-secondary btn-lg">Read the research</a>
         </div>
     </div>
@@ -23,7 +27,9 @@
         <h2>Strategies, by asset class</h2>
     </div>
     <div class="entries">
-        {% for ac in asset_classes %}
+        {# Skip equities for non-admins until it has real content. #}
+        {% set _visible = asset_classes if (user and user.is_admin) else asset_classes | rejectattr('slug', 'equalto', 'equities') | list %}
+        {% for ac in _visible %}
         <a class="entry" href="/{{ ac.slug }}">
             <span class="entry-num">{{ '%02d' | format(loop.index) }}</span>
             <div class="entry-body">

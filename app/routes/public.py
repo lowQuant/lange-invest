@@ -86,8 +86,13 @@ async def robots():
 async def sitemap(request: Request):
     cfg = get_config()
     base = f"https://{cfg.domain}"
-    urls = ["/", "/articles", "/portfolio"]
+    # Only index the surfaces that are actually populated. Equities and
+    # Portfolio are admin-only / not-yet-public.
+    public_slugs = {"futures"}
+    urls = ["/", "/articles"]
     for ac in cfg.asset_classes:
+        if ac.slug not in public_slugs:
+            continue
         urls.append(f"/{ac.slug}")
         urls.extend(f"/{ac.slug}/{v.slug}" for v in ac.variants)
     urls.extend(f"/articles/{a.slug}" for a in articles_mod.list_articles())

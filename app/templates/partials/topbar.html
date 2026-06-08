@@ -38,11 +38,18 @@
             </div>
         </div>
 
+        {# Equities and Portfolio are not yet populated; surface them only to
+           admins until they have real content. #}
+        {% set _is_admin = user and user.is_admin %}
         <nav class="masthead-nav" aria-label="Sections">
             <a class="masthead-nav-link {% if _nav == 'articles' %}active{% endif %}"  href="/articles">Research</a>
+            {% if _is_admin %}
             <a class="masthead-nav-link {% if _nav == 'equities' %}active{% endif %}"  href="/equities">Equities</a>
+            {% endif %}
             <a class="masthead-nav-link {% if _nav == 'futures' %}active{% endif %}"   href="/futures">Futures</a>
+            {% if _is_admin %}
             <a class="masthead-nav-link {% if _nav == 'portfolio' %}active{% endif %}" href="/portfolio">Portfolio</a>
+            {% endif %}
             <a class="masthead-nav-link {% if _nav == 'arcticdb' %}active{% endif %}"  href="/arcticdb">Data</a>
         </nav>
     </div>

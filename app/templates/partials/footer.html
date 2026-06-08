@@ -6,9 +6,9 @@
         </div>
         <div class="colophon-nav">
             <a href="/articles">Research</a>
-            <a href="/equities">Equities</a>
+            {% if user and user.is_admin %}<a href="/equities">Equities</a>{% endif %}
             <a href="/futures">Futures</a>
-            <a href="/portfolio">Portfolio</a>
+            {% if user and user.is_admin %}<a href="/portfolio">Portfolio</a>{% endif %}
             <a href="/arcticdb">Data</a>
         </div>
     </div>

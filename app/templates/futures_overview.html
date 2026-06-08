@@ -177,7 +177,7 @@
             </div>
         </div>
     </div>
-    <div class="qt-panel">
+    <div class="qt-panel mb-3">
         <div class="qt-panel-head">
             <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Sized portfolio</span>
             <span class="d-flex align-items-center gap-2">
@@ -205,6 +205,16 @@
                     <tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Loading market data…</td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <div class="qt-panel" id="sim-charts-panel" style="display:none;">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Continuous contracts</span>
+            <span class="label-mono" style="color:var(--ink-4);">back-adj close &middot; EMA(50), EMA(100)</span>
+        </div>
+        <div class="qt-panel-body">
+            <div class="fov-grid" id="sim-charts-grid"></div>
         </div>
     </div>
 </div>
@@ -472,8 +482,62 @@
         charts.clear();
         if (window._langeCharts) {
             window._langeCharts = window._langeCharts.filter(c =>
-                !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("chart-"));
+                !c.canvas || !c.canvas.id ||
+                !(c.canvas.id.startsWith("chart-") || c.canvas.id.startsWith("sim-chart-")));
         }
+    }
+    function destroySimCharts() {
+        const toKill = [];
+        charts.forEach((c, id) => { if (id.startsWith("sim-chart-")) toKill.push(id); });
+        toKill.forEach(id => {
+            try { charts.get(id).destroy(); } catch (e) {}
+            charts.delete(id);
+        });
+        if (window._langeCharts) {
+            window._langeCharts = window._langeCharts.filter(c =>
+                !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("sim-chart-"));
+        }
+    }
+    function mountSimCharts(sized) {
+        const grid = document.getElementById("sim-charts-grid");
+        const panel = document.getElementById("sim-charts-panel");
+        if (!grid || !panel || !payload) return;
+        destroySimCharts();
+        if (!sized.length) { panel.style.display = "none"; grid.innerHTML = ""; return; }
+        grid.innerHTML = sized.map(r => {
+            const sideCls = r.side === 1 ? "long" : "short";
+            const sideTxt = r.side === 1 ? "LONG" : "SHORT";
+            const entry = payload[r.sym] || {};
+            const last = entry.last != null ? fmt4g(entry.last) : "—";
+            return `<article class="fov-card">
+                <header class="fov-card-head">
+                    <div>
+                        <span class="fov-card-sym">${r.sym}</span>
+                        <span class="fov-card-name">${r.name}</span>
+                    </div>
+                    <span class="sim-side ${sideCls}">${sideTxt} &times;${fmtInt(r.contracts)}</span>
+                </header>
+                <div class="fov-card-meta">
+                    ${r.sector ? `<span>${r.sector}</span>` : ""}
+                    <span>ATR ${fmt4g(r.atr)}</span>
+                    <span class="num">last <strong>${last}</strong></span>
+                </div>
+                <div class="fov-canvas-wrap"><canvas id="sim-chart-${r.sym}"></canvas></div>
+            </article>`;
+        }).join("");
+        panel.style.display = "";
+        if (!window.Chart || !window.LangeChart) {
+            const wait = () => (window.Chart && window.LangeChart) ? mountSimCharts(sized) : setTimeout(wait, 50);
+            wait();
+            return;
+        }
+        sized.forEach(r => {
+            const entry = payload[r.sym];
+            if (!entry || !entry.curve_chart) return;
+            const id = "sim-chart-" + r.sym;
+            const ch = LangeChart.render(id, entry.curve_chart, { isMain: true });
+            if (ch) charts.set(id, ch);
+        });
     }
     function mountCharts(which) {
         destroyAll();
@@ -669,8 +733,14 @@
                             "size positions by ATR(100) and point value";
         document.getElementById("fov-charts").style.display = (m === "sim") ? "none" : "";
         document.getElementById("fov-sim").style.display = (m === "sim") ? "" : "none";
-        if (m === "sim") renderSim();
-        else mountCharts(m);
+        if (m === "sim") {
+            // Switching INTO sim — drop the gallery charts so they don't keep
+            // ticking in memory while the user is on this tab.
+            destroyAll();
+            renderSim();
+        } else {
+            mountCharts(m);
+        }
     };
 
     window.scrollToCard = function (sym) {
@@ -788,6 +858,7 @@
                 : "No markets match the current filters.";
             tbody.innerHTML = `<tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${reason}</td></tr>`;
             document.getElementById("sim-totals").textContent = "";
+            mountSimCharts([]);
             return;
         }
 
@@ -817,6 +888,8 @@
         const skipNote = skipped > 0 ? ` · ${skipped} below 1 contract` : "";
         document.getElementById("sim-totals").textContent =
             `target $${Math.round(targetDaily).toLocaleString("en-US")} / position · realised total $${Math.round(totalRisk).toLocaleString("en-US")}${skipNote}`;
+
+        mountSimCharts(sized);
     }
     // Live re-render on input change
     ["sim-equity", "sim-risk", "sim-mode"].forEach(id => {
@@ -882,7 +955,13 @@
         return allFetchInflight;
     }
     loadPayload();
-    document.addEventListener("themechange", () => { if (payload && mode !== "sim") setTimeout(() => mountCharts(mode), 30); });
+    document.addEventListener("themechange", () => {
+        if (!payload) return;
+        setTimeout(() => {
+            if (mode === "sim") renderSim();
+            else               mountCharts(mode);
+        }, 30);
+    });
 })();
 </script>
 {% endif %}

@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+{% block title %}{{ asset_class.name }} &mdash; {{ site.name }}{% endblock %}
+{% block meta_description %}{{ asset_class.blurb }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <span class="eyebrow"><i class="bi {{ asset_class.icon }}"></i> Asset class</span>
+        <h1>{{ asset_class.name }}</h1>
+        <p class="lead">{{ asset_class.blurb }}</p>
+    </div>
+    <div class="d-flex align-items-end gap-3">
+        <div class="metric-mini"><span class="v">{{ rows | length }}</span><span class="l">markets</span></div>
+        <div class="metric-mini"><span class="v">{{ sectors | length }}</span><span class="l">sectors</span></div>
+    </div>
+</div>
+
+{% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+{% elif not rows %}
+    <div class="alert alert-info">
+        The <code>futures</code> library is empty. Once contracts are written they will appear here grouped by sector.
+    </div>
+{% else %}
+
+{# ── Mode tabs (page-wide): Curves vs Term Structures ─────────────────────── #}
+<div class="fov-bar">
+    <div class="fov-tabs" role="tablist">
+        <button class="fov-tab active" data-mode="curve" role="tab"
+                onclick="setMode('curve')"><i class="bi bi-graph-up"></i> Continuous + EMA</button>
+        <button class="fov-tab" data-mode="term" role="tab"
+                onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term structure</button>
+    </div>
+    <span class="label-mono fov-hint"><span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span></span>
+</div>
+
+{# ── Trend summary table ──────────────────────────────────────────────────── #}
+<div class="qt-panel mb-4">
+    <div class="qt-panel-head">
+        <span class="qt-panel-head-title"><i class="bi bi-table"></i> Trend dashboard</span>
+        <span class="label-mono" style="color:var(--ink-4);">close &middot; EMA(100) &middot; click a row to jump to the chart</span>
+    </div>
+    <div class="qt-panel-body dense" style="padding:0;">
+        <table class="table table-sm mb-0 fov-table">
+            <thead>
+                <tr>
+                    <th class="fov-sortable" data-key="symbol" data-dir="asc">Symbol <i class="bi bi-caret-down-fill"></i></th>
+                    <th class="fov-sortable" data-key="name">Name</th>
+                    <th class="fov-sortable" data-key="sector">Sector</th>
+                    <th class="fov-sortable text-end" data-key="last">Last</th>
+                    <th class="fov-sortable text-end" data-key="trend_pct">vs EMA(100)</th>
+                    <th>Trend</th>
+                </tr>
+            </thead>
+            <tbody id="fov-tbody">
+                {% for r in rows %}
+                <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
+                    data-last="{{ r.last if r.last is not none else '' }}"
+                    data-trend="{{ '%.6f' % r.trend_pct if r.trend_pct is not none else '' }}"
+                    onclick="scrollToCard('{{ r.symbol }}')">
+                    <td class="fov-sym">{{ r.symbol }}</td>
+                    <td>{{ r.name }}</td>
+                    <td><span class="fov-chip">{{ r.sector }}</span></td>
+                    <td class="num text-end">{% if r.last is not none %}{{ "%.4g" | format(r.last) }}{% else %}&mdash;{% endif %}</td>
+                    <td class="num text-end">
+                        {% if r.trend_pct is not none %}
+                            <span class="{{ 'text-up' if r.trend_pct >= 0 else 'text-down' }}">
+                                {{ "%+.2f%%" | format(r.trend_pct * 100) }}
+                            </span>
+                        {% else %}&mdash;{% endif %}
+                    </td>
+                    <td>
+                        {% if r.trend_pct is none %}
+                            <span class="fov-trend muted">&mdash;</span>
+                        {% elif r.trend_pct >= 0 %}
+                            <span class="fov-trend up"><i class="bi bi-arrow-up-right"></i> up</span>
+                        {% else %}
+                            <span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{# ── Sector-grouped grid of mini charts ───────────────────────────────────── #}
+{% for sec in sectors %}
+<section class="fov-sector">
+    <div class="fov-sector-head">
+        <h2>{{ sec.name }}</h2>
+        <span class="label-mono">{{ sec.items | length }} market{% if (sec.items | length) != 1 %}s{% endif %}</span>
+    </div>
+    <div class="fov-grid">
+        {% for r in sec.items %}
+        <article class="fov-card" id="card-{{ r.symbol }}">
+            <header class="fov-card-head">
+                <div>
+                    <span class="fov-card-sym">{{ r.symbol }}</span>
+                    <span class="fov-card-name">{{ r.name }}</span>
+                </div>
+                {% if r.trend_pct is not none %}
+                    <span class="fov-card-trend {{ 'up' if r.trend_pct >= 0 else 'down' }}">
+                        {{ "%+.2f%%" | format(r.trend_pct * 100) }}
+                    </span>
+                {% endif %}
+            </header>
+            <div class="fov-card-meta">
+                {% if r.exchange %}<span>{{ r.exchange }}</span>{% endif %}
+                {% if r.currency %}<span>{{ r.currency }}</span>{% endif %}
+                {% if r.last is not none %}
+                    <span class="num">last <strong>{{ "%.4g" | format(r.last) }}</strong></span>
+                {% endif %}
+            </div>
+            <div class="fov-canvas-wrap">
+                <canvas id="chart-{{ r.symbol }}"></canvas>
+            </div>
+            {% if r.curve_chart %}<script type="application/json" id="data-curve-{{ r.symbol }}">{{ r.curve_chart | tojson }}</script>{% endif %}
+            {% if r.term_chart %}<script type="application/json" id="data-term-{{ r.symbol }}">{{ r.term_chart | tojson }}</script>{% endif %}
+        </article>
+        {% endfor %}
+    </div>
+</section>
+{% endfor %}
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if rows %}
+<style>
+    /* Mode bar */
+    .fov-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; margin: 0 0 1.5rem;
+        padding: 0.55rem 0.85rem;
+        border: 1px solid var(--line-2); border-radius: var(--radius);
+        background: var(--bg-1);
+    }
+    .fov-tabs { display: flex; gap: .25rem; }
+    .fov-tab {
+        background: transparent; border: 0; padding: .35rem .85rem;
+        font-family: var(--mono); font-size: .7rem;
+        text-transform: uppercase; letter-spacing: .1em;
+        color: var(--ink-3); border-radius: 3px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: .4rem;
+        transition: color .15s, background .15s;
+    }
+    .fov-tab:hover { color: var(--ink-1); background: var(--bg-2); }
+    .fov-tab.active { color: var(--ink-1); background: var(--bg-3); }
+    .fov-tab .bi { font-size: .85rem; color: var(--signature); }
+    .fov-hint { color: var(--ink-4); }
+
+    /* Trend table */
+    .fov-table { font-size: .8125rem; }
+    .fov-table thead th {
+        font-family: var(--mono); font-size: .65rem; font-weight: 500;
+        text-transform: uppercase; letter-spacing: .1em;
+        color: var(--ink-3); border-color: var(--line-2) !important;
+        padding: .55rem .75rem; background: var(--bg-1);
+        position: sticky; top: 0; z-index: 1;
+    }
+    .fov-table tbody td {
+        padding: .5rem .75rem; border-color: var(--line-1) !important;
+        vertical-align: middle;
+    }
+    .fov-table tbody tr { cursor: pointer; transition: background .12s; }
+    .fov-table tbody tr:hover { background: var(--bg-2); }
+    .fov-sortable { cursor: pointer; user-select: none; }
+    .fov-sortable:hover { color: var(--ink-1); }
+    .fov-sortable .bi { opacity: .35; font-size: .65rem; margin-left: .15rem; }
+    .fov-sortable.sort-asc .bi, .fov-sortable.sort-desc .bi { opacity: 1; color: var(--signature); }
+    .fov-sortable.sort-desc .bi { transform: rotate(180deg); display: inline-block; }
+    .fov-sym { font-family: var(--mono); font-weight: 600; color: var(--ink-1); }
+    .fov-chip {
+        display: inline-block; padding: .1rem .45rem;
+        font-family: var(--mono); font-size: .65rem;
+        text-transform: uppercase; letter-spacing: .08em;
+        color: var(--ink-2); background: var(--bg-3);
+        border: 1px solid var(--line-2); border-radius: 999px;
+    }
+    .text-up { color: var(--up); }
+    .text-down { color: var(--down); }
+    .fov-trend {
+        display: inline-flex; align-items: center; gap: .25rem;
+        font-family: var(--mono); font-size: .7rem;
+        text-transform: uppercase; letter-spacing: .08em;
+        padding: .15rem .45rem; border-radius: 3px;
+    }
+    .fov-trend.up { color: var(--up); background: var(--up-dim); }
+    .fov-trend.down { color: var(--down); background: var(--down-dim); }
+    .fov-trend.muted { color: var(--ink-4); }
+
+    /* Sector + grid */
+    .fov-sector { margin-bottom: 2.25rem; }
+    .fov-sector-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        margin-bottom: .85rem;
+        padding-bottom: .4rem; border-bottom: 1px solid var(--line-2);
+    }
+    .fov-sector-head h2 {
+        margin: 0; font-family: var(--serif); font-size: 1.05rem;
+        font-weight: 500; letter-spacing: .04em; color: var(--ink-1);
+        text-transform: uppercase;
+    }
+    .fov-grid {
+        display: grid; gap: 1rem;
+        grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+    }
+    .fov-card {
+        border: 1px solid var(--line-2); border-radius: var(--radius);
+        background: var(--bg-1); padding: .85rem .95rem;
+        scroll-margin-top: 80px;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .fov-card:hover { border-color: var(--line-3); }
+    .fov-card.flash { box-shadow: 0 0 0 2px var(--signature-dim); }
+    .fov-card-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        gap: .5rem; margin-bottom: .15rem;
+    }
+    .fov-card-sym { font-family: var(--mono); font-weight: 600; font-size: .95rem; color: var(--ink-1); }
+    .fov-card-name { margin-left: .5rem; color: var(--ink-3); font-size: .8rem; }
+    .fov-card-trend {
+        font-family: var(--mono); font-size: .75rem; font-variant-numeric: tabular-nums;
+    }
+    .fov-card-trend.up { color: var(--up); }
+    .fov-card-trend.down { color: var(--down); }
+    .fov-card-meta {
+        display: flex; gap: .75rem;
+        font-family: var(--mono); font-size: .65rem;
+        text-transform: uppercase; letter-spacing: .08em;
+        color: var(--ink-3); margin-bottom: .55rem;
+    }
+    .fov-card-meta strong { color: var(--ink-1); font-weight: 500; }
+    .fov-canvas-wrap { position: relative; height: 170px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="{{ url_for('static', path='js/charts.js') }}"></script>
+<script>
+(function () {
+    let currentMode = "curve";
+    const charts = new Map();   // canvasId → Chart instance
+
+    function mountAll(mode) {
+        // Destroy any currently mounted gallery charts and re-render the
+        // requested mode. We use LangeChart.render (not .mount) so our charts
+        // do NOT enter the global theme-redraw registry — this page owns its
+        // own themechange handler and would otherwise double-fire.
+        charts.forEach(c => { try { c.destroy(); } catch (e) {} });
+        charts.clear();
+        if (window._langeCharts) {
+            window._langeCharts = window._langeCharts.filter(c =>
+                !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("chart-"));
+        }
+        document.querySelectorAll(".fov-canvas-wrap canvas").forEach(canvas => {
+            const sym = canvas.id.replace(/^chart-/, "");
+            const tag = document.getElementById("data-" + mode + "-" + sym);
+            if (!tag) return;
+            let data;
+            try { data = JSON.parse(tag.textContent); } catch (e) { return; }
+            const ch = LangeChart.render(canvas.id, data, { isMain: true });
+            if (ch) charts.set(canvas.id, ch);
+        });
+    }
+
+    window.setMode = function (mode) {
+        if (mode === currentMode) return;
+        currentMode = mode;
+        document.querySelectorAll(".fov-tab").forEach(t =>
+            t.classList.toggle("active", t.dataset.mode === mode));
+        document.getElementById("fov-mode-hint").textContent =
+            mode === "curve" ? "close, back-adj · EMA(50), EMA(100)"
+                             : "forward curve at the latest date, near→far by DTE";
+        mountAll(mode);
+    };
+
+    window.scrollToCard = function (sym) {
+        const el = document.getElementById("card-" + sym);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.classList.add("flash");
+        setTimeout(() => el.classList.remove("flash"), 1200);
+    };
+
+    // ── Sortable table ──
+    function sortTable(key, dir) {
+        const tbody = document.getElementById("fov-tbody");
+        const rows = Array.from(tbody.querySelectorAll("tr"));
+        const numeric = key === "last" || key === "trend_pct";
+        const attr = key === "symbol" ? "sym"
+                   : key === "name"   ? "name"
+                   : key === "sector" ? "sector"
+                   : key === "last"   ? "last"
+                   : "trend";
+        rows.sort((a, b) => {
+            let av = a.dataset[attr] || "", bv = b.dataset[attr] || "";
+            if (numeric) {
+                av = av === "" ? -Infinity : parseFloat(av);
+                bv = bv === "" ? -Infinity : parseFloat(bv);
+                return dir === "asc" ? av - bv : bv - av;
+            }
+            return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+        });
+        rows.forEach(r => tbody.appendChild(r));
+    }
+    document.querySelectorAll(".fov-sortable").forEach(th => {
+        th.addEventListener("click", () => {
+            const key = th.dataset.key;
+            const curr = th.dataset.dir || (key === "trend_pct" ? "desc" : "asc");
+            const next = curr === "asc" ? "desc" : "asc";
+            document.querySelectorAll(".fov-sortable").forEach(t => {
+                t.dataset.dir = ""; t.classList.remove("sort-asc", "sort-desc");
+            });
+            th.dataset.dir = next;
+            th.classList.add(next === "asc" ? "sort-asc" : "sort-desc");
+            sortTable(key, next);
+        });
+    });
+
+    // ── Initial mount + theme handling ──
+    function init() {
+        if (!window.Chart || !window.LangeChart) return setTimeout(init, 50);
+        mountAll(currentMode);
+    }
+    init();
+    document.addEventListener("themechange", () => setTimeout(() => mountAll(currentMode), 30));
+})();
+</script>
+{% endif %}
+{% endblock %}

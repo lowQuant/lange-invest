@@ -103,20 +103,6 @@ blurb = "Four equity books on a liquid US universe — one for reversion, one fo
 slug = "futures"
 name = "Futures"
 icon = "bi-graph-up-arrow"
-blurb = "Continuously-rolled futures programs across the liquid global complex — equity index, rates, FX, energy, and metals."
-
-  [[asset_class.variant]]
-  slug = "trend"
-  name = "Trend"
-  blurb = "Time-series momentum that goes long winners and short losers across the whole complex."
-  methodology = "Classic time-series momentum: each market is sized long or short by the sign and strength of its own multi-horizon trend, scaled to a common risk target so no single market dominates. Diversification across roughly two dozen liquid contracts does the heavy lifting."
-  signals_symbol = "trend"
-  stats_symbol = "trend"
-
-  [[asset_class.variant]]
-  slug = "carry"
-  name = "Carry"
-  blurb = "Harvests the roll yield embedded in each market's term structure, long and short."
-  methodology = "A cross-sectional carry book that is long markets in backwardation and short those in contango, ranked by roll yield net of estimated cost. Positions are risk-weighted and netted against the trend book so the two programs share margin efficiently."
-  signals_symbol = "carry"
-  stats_symbol = "carry"
+blurb = "The liquid global complex — equity index, rates, FX, energy, metals. Curves and term structures grouped by sector. Strategies will follow."
+# No variants yet — /futures renders the data-driven overview (curves + term
+# structures + trend table) instead of a strategy sub-nav.

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from app import articles as articles_mod
+from app import futures_overview
 from app.auth import current_user
 from app.config import get_config
 from app import snapshots
@@ -97,6 +98,29 @@ async def sitemap(request: Request):
         f"{items}</urlset>"
     )
     return Response(content=xml, media_type="application/xml")
+
+
+# ── Futures overview ─────────────────────────────────────────────────────────
+# /futures has no strategy variants yet, so it renders a custom data-driven
+# overview (sector-grouped continuous curves + term structures + trend table)
+# instead of the generic asset-class landing. Declared BEFORE the /{ac_slug}
+# catch-all so this route wins.
+@router.get("/futures", response_class=HTMLResponse)
+async def futures_overview_page(request: Request):
+    cfg = get_config()
+    ac = cfg.asset_class("futures")
+    if ac is None:
+        raise HTTPException(status_code=404)
+    data = futures_overview.build_overview()
+    return render(
+        request,
+        "futures_overview.html",
+        nav_active="futures",
+        asset_class=ac,
+        sectors=data["sectors"],
+        rows=data["rows"],
+        error=data["error"],
+    )
 
 
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────

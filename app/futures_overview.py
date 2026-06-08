@@ -195,10 +195,14 @@ def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
 
     curve_main = term_main = None
     try:
+        # back_ratio (multiplicative back-adjustment) keeps the series on the
+        # same scale as actual prices, so close-vs-EMA comparisons are
+        # meaningful. back_diff would bias every contango-heavy market to
+        # "below EMA100" regardless of real trend.
         curve_main, _, curve_err = ac.build_chart(df, symbol, {
             "contract_mode": "single",
             "contract_col": col,
-            "continuous_method": "back_diff",
+            "continuous_method": "back_ratio",
             "roll_rule": "expiry",
             "contract_rank": 1,
             "chart_type": "line",

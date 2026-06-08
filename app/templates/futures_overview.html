@@ -163,8 +163,9 @@
             </div>
             <div class="sim-formula">
                 Sizing rule: <code>contracts = risk × equity / (ATR<sub>100</sub> × point&nbsp;value)</code>.
-                Trend direction sets the side (uptrend → long, downtrend → short).
-                Filter chips above narrow the universe.
+                In <em>diversified</em> mode the trend signal sets the side (uptrend → long, downtrend → short).
+                <em>Long only</em> / <em>short only</em> force the side for every market in scope —
+                combine with the Up / Down trend chip above for a trend-conditional book.
             </div>
         </div>
     </div>
@@ -670,11 +671,14 @@
             const tr = document.querySelector(`#fov-tbody tr[data-sym="${sym}"]`);
             const sector = tr ? tr.dataset.sector : "";
             const name = tr ? tr.dataset.name : sym;
-            // Decide side
+            // Universe mode forces the side; the trend filter above narrows
+            // which symbols are eligible. Long-only / short-only therefore
+            // mean "go long/short every market in scope" — pair them with
+            // the Up/Down trend chips for a trend-conditional book.
             let side = 0;
-            if (simMode === "long")        side = e.trend_signal === 1 ? 1 : 0;
-            else if (simMode === "short")  side = e.trend_signal === -1 ? -1 : 0;
-            else                            side = e.trend_signal;  // diversified
+            if (simMode === "long")        side = 1;
+            else if (simMode === "short")  side = -1;
+            else                            side = e.trend_signal;  // diversified: up→long, down→short
             // Compute contracts only if we have all the inputs and a side
             let contracts = null, notional = null, dailyRisk = null;
             if (side !== 0 && e.atr100 != null && e.multiplier != null && e.atr100 > 0 && e.multiplier > 0) {

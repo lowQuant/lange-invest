@@ -2,9 +2,17 @@
 
 Reads the public ``futures`` library and the metadata symbol ``universe/Futures``,
 computes per-symbol chart data (continuous back-adjusted close with EMA50/100
-and the latest forward curve), plus a simple trend metric (last close vs EMA100
-in %). Everything is built through the existing ``arctic_charting`` helpers so
-the gallery charts share the symbol page's chart vocabulary.
+and the latest forward curve), plus a trend signal and an ATR(100) estimate
+used by the position-sizing tab.
+
+Sector is taken from the ``asset_class`` column of ``universe/Futures``
+(``sector`` / ``category`` as fallbacks). Point value is read from
+``multiplier`` (``point_value`` / ``contract_size`` as fallbacks).
+
+Trend signal:
+    +1  uptrend    — EMA(50) > EMA(100)  AND  close > EMA(100)
+    -1  downtrend  — EMA(50) < EMA(100)  AND  close < EMA(100)
+     0  neutral    — anything else (mixed signals)
 
 Cached in-process — invalidate via ``invalidate_cache()`` after a fresh write.
 """
@@ -22,21 +30,30 @@ from app.engine import ensure_connected
 _META_CACHE: dict[str, Any] = {}
 _CHART_CACHE: dict[str, Any] = {}
 
+# Column-name aliases — production may use any of these.
+SECTOR_COLS = ("asset_class", "sector", "category", "assetClass")
+MULTIPLIER_COLS = ("multiplier", "point_value", "contract_size", "contractMultiplier")
+NAME_COLS = ("name", "description", "long_name")
+
 
 def invalidate_cache() -> None:
     _META_CACHE.clear()
     _CHART_CACHE.clear()
 
 
+def _first(d: dict, keys: tuple[str, ...]) -> Any:
+    """Return the first non-empty value among the given keys."""
+    for k in keys:
+        v = d.get(k)
+        if v is not None and v != "" and not (isinstance(v, float) and v != v):
+            return v
+    return None
+
+
 # ── universe/Futures metadata ────────────────────────────────────────────────
 
 def _read_universe_futures() -> dict[str, dict[str, Any]]:
-    """Return ``{SYMBOL: {sector, name, exchange, currency, multiplier, tick_size, …}}``.
-
-    Tries the canonical key column ``symbol`` first, then a few common
-    alternatives (``ibkr_symbol`` / ``ticker`` / ``name``). Returns ``{}`` on any
-    failure — the page degrades to a metadata-less view.
-    """
+    """Return ``{SYMBOL: {name, sector, exchange, currency, multiplier, …}}``."""
     try:
         usyms = public_access.list_symbols("universe")
     except Exception:  # noqa: BLE001
@@ -62,14 +79,76 @@ def _read_universe_futures() -> dict[str, dict[str, Any]]:
     return out
 
 
+def _meta_for(sym: str, uni: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Normalise a universe row down to the canonical fields the UI uses."""
+    meta = uni.get(sym.upper(), {})
+    sector = _first(meta, SECTOR_COLS) or "Other"
+    mult = _first(meta, MULTIPLIER_COLS)
+    try:
+        mult = float(mult) if mult is not None else None
+    except (TypeError, ValueError):
+        mult = None
+    return {
+        "name": str(_first(meta, NAME_COLS) or sym),
+        "sector": str(sector),
+        "exchange": str(meta.get("exchange") or ""),
+        "currency": str(meta.get("currency") or ""),
+        "multiplier": mult,
+    }
+
+
+# ── Front-month OHLC + ATR(100) ──────────────────────────────────────────────
+
+def _front_month_ohlc(df: pd.DataFrame) -> pd.DataFrame | None:
+    """Daily OHLC of the front-month contract (selected by smallest positive DTE).
+
+    Falls back to the first contract per date if no `dte` column is present.
+    Returns None if the frame doesn't carry OHLC.
+    """
+    cols = {c.lower(): c for c in df.columns}
+    if not all(k in cols for k in ("high", "low", "close")):
+        return None
+    has_dte = "dte" in df.columns
+    rows = []
+    for date in sorted(df.index.get_level_values(0).unique()):
+        try:
+            slab = df.loc[date]
+        except KeyError:
+            continue
+        if isinstance(slab, pd.Series):
+            slab = slab.to_frame().T
+        if has_dte:
+            live = slab[slab["dte"] > 0]
+            if len(live) == 0:
+                continue
+            front = live.sort_values(by="dte").iloc[0]
+        else:
+            front = slab.iloc[0]
+        rows.append((date, float(front[cols["high"]]), float(front[cols["low"]]), float(front[cols["close"]])))
+    if not rows:
+        return None
+    out = pd.DataFrame(rows, columns=["date", "h", "l", "c"]).set_index("date")
+    return out
+
+
+def _atr100(ohlc: pd.DataFrame | None) -> float | None:
+    """Latest ATR(100) on a daily OHLC frame with columns ``h``, ``l``, ``c``."""
+    if ohlc is None or len(ohlc) < 20:
+        return None
+    prev_c = ohlc["c"].shift(1)
+    tr = pd.concat([
+        ohlc["h"] - ohlc["l"],
+        (ohlc["h"] - prev_c).abs(),
+        (ohlc["l"] - prev_c).abs(),
+    ], axis=1).max(axis=1)
+    atr = tr.rolling(100, min_periods=20).mean().dropna()
+    return float(atr.iloc[-1]) if len(atr) else None
+
+
 # ── Per-symbol compute ───────────────────────────────────────────────────────
 
 def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
-    """Continuous curve (+ EMA50/100) + term structure + trend metric for one root.
-
-    Returns ``None`` if the symbol is not a MultiIndex (date, contract) future or
-    the read fails. Never raises — bad symbols are skipped silently.
-    """
+    """Continuous curve + term structure + trend + ATR(100) for one root."""
     try:
         df = public_access.read_data("futures", symbol)
     except Exception:  # noqa: BLE001
@@ -108,15 +187,32 @@ def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001
         term_main = None
 
-    last_close = trend_pct = None
+    # Trend signal: +1 if EMA50 > EMA100 AND close > EMA100, -1 if both below.
+    last_close = last_ema50 = last_ema100 = None
     if curve_main and curve_main.get("datasets"):
         raw = curve_main["datasets"][0].get("data", [])
+        ema50 = next((d.get("data", []) for d in curve_main["datasets"]
+                      if str(d.get("label", "")).upper() == "EMA(50)"), [])
         ema100 = next((d.get("data", []) for d in curve_main["datasets"]
                        if str(d.get("label", "")).upper() == "EMA(100)"), [])
         last_close = next((v for v in reversed(raw) if v is not None), None)
+        last_ema50 = next((v for v in reversed(ema50) if v is not None), None)
         last_ema100 = next((v for v in reversed(ema100) if v is not None), None)
-        if last_close is not None and last_ema100 not in (None, 0):
-            trend_pct = (last_close - last_ema100) / last_ema100
+
+    trend_signal = 0
+    trend_pct = None
+    if last_close is not None and last_ema50 is not None and last_ema100 not in (None, 0):
+        trend_pct = (last_close - last_ema100) / last_ema100
+        if last_ema50 > last_ema100 and last_close > last_ema100:
+            trend_signal = 1
+        elif last_ema50 < last_ema100 and last_close < last_ema100:
+            trend_signal = -1
+
+    # ATR(100) on front-month OHLC
+    try:
+        atr100 = _atr100(_front_month_ohlc(df))
+    except Exception:  # noqa: BLE001
+        atr100 = None
 
     return {
         "symbol": symbol,
@@ -124,6 +220,8 @@ def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
         "term_chart": term_main,
         "last": last_close,
         "trend_pct": trend_pct,
+        "trend_signal": trend_signal,
+        "atr100": atr100,
     }
 
 
@@ -134,7 +232,7 @@ def build_meta() -> dict[str, Any]:
 
     Cheap: one read of universe/Futures + one list of `futures` symbols. No
     per-symbol chart payloads, so the page renders instantly; JS then fetches
-    /futures/api/payload to fill in trend numbers and mount the charts.
+    /futures/api/payload to fill in trend numbers, ATR, and the charts.
     """
     if "data" in _META_CACHE:
         return _META_CACHE["data"]
@@ -150,13 +248,14 @@ def build_meta() -> dict[str, Any]:
     uni = _read_universe_futures()
     rows: list[dict[str, Any]] = []
     for s in symbols:
-        meta = uni.get(s.upper(), {})
+        meta = _meta_for(s, uni)
         rows.append({
             "symbol": s,
-            "name": str(meta.get("name") or s),
-            "sector": str(meta.get("sector") or "Other"),
-            "exchange": str(meta.get("exchange") or ""),
-            "currency": str(meta.get("currency") or ""),
+            "name": meta["name"],
+            "sector": meta["sector"],
+            "exchange": meta["exchange"],
+            "currency": meta["currency"],
+            "multiplier": meta["multiplier"],
         })
 
     sectors: dict[str, list[dict[str, Any]]] = {}
@@ -175,11 +274,7 @@ def build_meta() -> dict[str, Any]:
 
 
 def build_chart_payload() -> dict[str, Any]:
-    """Per-symbol chart payloads — heavy first hit, cached per process.
-
-    Returns ``{symbol: {last, trend_pct, curve_chart, term_chart}}`` for every
-    chartable symbol in the futures library.
-    """
+    """Per-symbol chart payloads + trend + ATR — heavy first hit, cached."""
     if "data" in _CHART_CACHE:
         return _CHART_CACHE["data"]
 
@@ -191,14 +286,19 @@ def build_chart_payload() -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         return {}
 
+    uni = _read_universe_futures()
     out: dict[str, Any] = {}
     for s in symbols:
         data = _compute_for_symbol(s)
         if data is None:
             continue
+        meta = _meta_for(s, uni)
         out[s] = {
             "last": data["last"],
             "trend_pct": data["trend_pct"],
+            "trend_signal": data["trend_signal"],
+            "atr100": data["atr100"],
+            "multiplier": meta["multiplier"],
             "curve_chart": data["curve_chart"],
             "term_chart": data["term_chart"],
         }

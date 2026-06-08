@@ -23,13 +23,15 @@
     </div>
 {% else %}
 
-{# ── Mode tabs (page-wide): Curves vs Term Structures ─────────────────────── #}
+{# ── Mode tabs: Continuous | Term | Sim ───────────────────────────────────── #}
 <div class="fov-bar">
     <div class="fov-tabs" role="tablist">
         <button class="fov-tab active" data-mode="curve" role="tab"
-                onclick="setMode('curve')"><i class="bi bi-graph-up"></i> Continuous + EMA</button>
+                onclick="setMode('curve')"><i class="bi bi-graph-up"></i> Continuous Contracts</button>
         <button class="fov-tab" data-mode="term" role="tab"
-                onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term structure</button>
+                onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term Structure</button>
+        <button class="fov-tab" data-mode="sim" role="tab"
+                onclick="setMode('sim')"><i class="bi bi-calculator"></i> Portfolio Simulator</button>
     </div>
     <span class="label-mono fov-hint">
         <span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span>
@@ -37,11 +39,30 @@
     </span>
 </div>
 
-{# ── Trend summary table (hydrated by JS once payload arrives) ────────────── #}
+{# ── Filter chips: sector + trend (apply across all tabs) ─────────────────── #}
+<div class="fov-filters" id="fov-filters">
+    <span class="ac-lbl">Sector</span>
+    <div class="fov-chip-group" id="fov-sector-chips">
+        <button class="fov-chip active" data-sector="all">All</button>
+        {% for sec in sectors %}
+        <button class="fov-chip" data-sector="{{ sec.name }}">{{ sec.name }} <span class="fov-chip-n">{{ sec.markets | length }}</span></button>
+        {% endfor %}
+    </div>
+    <span class="fov-sep"></span>
+    <span class="ac-lbl">Trend</span>
+    <div class="fov-chip-group" id="fov-trend-chips">
+        <button class="fov-chip active" data-trend="all">All</button>
+        <button class="fov-chip" data-trend="up"><i class="bi bi-arrow-up-right"></i> Up</button>
+        <button class="fov-chip" data-trend="down"><i class="bi bi-arrow-down-right"></i> Down</button>
+        <button class="fov-chip" data-trend="neutral">Neutral</button>
+    </div>
+</div>
+
+{# ── Trend summary table (hydrated by JS; filtered by the chips) ──────────── #}
 <div class="qt-panel mb-4">
     <div class="qt-panel-head">
         <span class="qt-panel-head-title"><i class="bi bi-table"></i> Trend dashboard</span>
-        <span class="label-mono" style="color:var(--ink-4);">close &middot; EMA(100) &middot; click a row to jump to the chart</span>
+        <span class="label-mono" style="color:var(--ink-4);">EMA(50) vs EMA(100) &middot; click a row to jump to the chart</span>
     </div>
     <div class="qt-panel-body dense" style="padding:0;">
         <table class="table table-sm mb-0 fov-table">
@@ -58,11 +79,11 @@
             <tbody id="fov-tbody">
                 {% for r in rows %}
                 <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
-                    data-last="" data-trend=""
+                    data-trend-signal="" data-last="" data-trend=""
                     onclick="scrollToCard('{{ r.symbol }}')">
                     <td class="fov-sym">{{ r.symbol }}</td>
                     <td>{{ r.name }}</td>
-                    <td><span class="fov-chip">{{ r.sector }}</span></td>
+                    <td><span class="fov-chip-pill">{{ r.sector }}</span></td>
                     <td class="num text-end fov-cell-last">&mdash;</td>
                     <td class="num text-end fov-cell-trendpct">&mdash;</td>
                     <td class="fov-cell-trend"><span class="fov-trend muted">&mdash;</span></td>
@@ -73,16 +94,18 @@
     </div>
 </div>
 
-{# ── Sector-grouped grid of mini charts ───────────────────────────────────── #}
+{# ── Mode views: chart grid (curve/term) OR sim panel ─────────────────────── #}
+<div id="fov-charts">
 {% for sec in sectors %}
-<section class="fov-sector">
+<section class="fov-sector" data-sector="{{ sec.name }}">
     <div class="fov-sector-head">
         <h2>{{ sec.name }}</h2>
-        <span class="label-mono">{{ sec.markets | length }} market{% if (sec.markets | length) != 1 %}s{% endif %}</span>
+        <span class="label-mono fov-sec-count">{{ sec.markets | length }} market{% if (sec.markets | length) != 1 %}s{% endif %}</span>
     </div>
     <div class="fov-grid">
         {% for r in sec.markets %}
-        <article class="fov-card" id="card-{{ r.symbol }}" data-symbol="{{ r.symbol }}">
+        <article class="fov-card" id="card-{{ r.symbol }}"
+                 data-symbol="{{ r.symbol }}" data-sector="{{ r.sector }}" data-trend-signal="">
             <header class="fov-card-head">
                 <div>
                     <span class="fov-card-sym">{{ r.symbol }}</span>
@@ -107,6 +130,69 @@
     </div>
 </section>
 {% endfor %}
+</div>
+
+{# ── Portfolio Simulator panel ────────────────────────────────────────────── #}
+<div id="fov-sim" style="display:none;">
+    <div class="qt-panel mb-3">
+        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-calculator"></i> Position sizing</span></div>
+        <div class="qt-panel-body sim-form">
+            <div class="sim-input-row">
+                <label class="sim-input">
+                    <span class="ac-lbl">Account size</span>
+                    <div class="sim-input-field">
+                        <span class="sim-prefix">$</span>
+                        <input type="text" id="sim-equity" value="1,000,000" inputmode="numeric">
+                    </div>
+                </label>
+                <label class="sim-input">
+                    <span class="ac-lbl">Risk per position</span>
+                    <div class="sim-input-field">
+                        <input type="number" id="sim-risk" value="0.20" min="0.01" max="2" step="0.01">
+                        <span class="sim-suffix">%</span>
+                    </div>
+                </label>
+                <label class="sim-input">
+                    <span class="ac-lbl">Universe</span>
+                    <select id="sim-mode" class="form-select form-select-sm">
+                        <option value="diversified" selected>Diversified (long + short)</option>
+                        <option value="long">Long only</option>
+                        <option value="short">Short only</option>
+                    </select>
+                </label>
+            </div>
+            <div class="sim-formula">
+                Sizing rule: <code>contracts = risk × equity / (ATR<sub>100</sub> × point&nbsp;value)</code>.
+                Trend direction sets the side (uptrend → long, downtrend → short).
+                Filter chips above narrow the universe.
+            </div>
+        </div>
+    </div>
+    <div class="qt-panel">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Sized portfolio</span>
+            <span class="label-mono" id="sim-totals" style="color:var(--ink-3);"></span>
+        </div>
+        <div class="qt-panel-body dense" style="padding:0;">
+            <table class="table table-sm mb-0 fov-table sim-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th><th>Name</th><th>Sector</th><th>Side</th>
+                        <th class="text-end">ATR(100)</th>
+                        <th class="text-end">Point&nbsp;value</th>
+                        <th class="text-end">Last</th>
+                        <th class="text-end">Contracts</th>
+                        <th class="text-end">Notional</th>
+                        <th class="text-end">Daily&nbsp;$&nbsp;risk</th>
+                    </tr>
+                </thead>
+                <tbody id="sim-tbody">
+                    <tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Loading market data…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
 {% endif %}
 {% endblock %}
@@ -117,7 +203,7 @@
     /* Mode bar */
     .fov-bar {
         display: flex; align-items: center; justify-content: space-between;
-        gap: 1rem; margin: 0 0 1.5rem;
+        gap: 1rem; margin: 0 0 .75rem;
         padding: 0.55rem 0.85rem;
         border: 1px solid var(--line-2); border-radius: var(--radius);
         background: var(--bg-1);
@@ -138,6 +224,43 @@
     .fov-loading { color: var(--signature); }
     .fov-loading.done { display: none; }
 
+    /* Filter chips row */
+    .fov-filters {
+        display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
+        margin: 0 0 1.25rem; padding: .55rem .85rem;
+        border: 1px solid var(--line-1); border-radius: var(--radius);
+        background: transparent;
+    }
+    .fov-filters .ac-lbl {
+        font-family: var(--mono); font-size: .625rem;
+        text-transform: uppercase; letter-spacing: .1em;
+        color: var(--ink-3);
+    }
+    .fov-chip-group { display: flex; gap: .3rem; flex-wrap: wrap; }
+    .fov-chip {
+        background: transparent; border: 1px solid var(--line-2);
+        color: var(--ink-2); padding: .22rem .65rem;
+        font-family: var(--mono); font-size: .68rem;
+        text-transform: uppercase; letter-spacing: .08em;
+        border-radius: 999px; cursor: pointer;
+        display: inline-flex; align-items: center; gap: .25rem;
+        transition: all .12s;
+    }
+    .fov-chip:hover { color: var(--ink-1); border-color: var(--line-3); }
+    .fov-chip.active {
+        color: var(--paper); background: var(--ink-1);
+        border-color: var(--ink-1);
+    }
+    .fov-chip-n {
+        opacity: .55; font-size: .6rem;
+        padding-left: .35rem; border-left: 1px solid currentColor; margin-left: .1rem;
+    }
+    .fov-chip.active .fov-chip-n { opacity: .7; }
+    .fov-sep {
+        width: 1px; height: 22px; background: var(--line-2);
+        margin: 0 .3rem;
+    }
+
     /* Trend table */
     .fov-table { font-size: .8125rem; }
     .fov-table thead th {
@@ -153,13 +276,14 @@
     }
     .fov-table tbody tr { cursor: pointer; transition: background .12s; }
     .fov-table tbody tr:hover { background: var(--bg-2); }
+    .fov-table tbody tr.hidden { display: none; }
     .fov-sortable { cursor: pointer; user-select: none; }
     .fov-sortable:hover { color: var(--ink-1); }
     .fov-sortable .bi { opacity: .35; font-size: .65rem; margin-left: .15rem; }
     .fov-sortable.sort-asc .bi, .fov-sortable.sort-desc .bi { opacity: 1; color: var(--signature); }
     .fov-sortable.sort-desc .bi { transform: rotate(180deg); display: inline-block; }
     .fov-sym { font-family: var(--mono); font-weight: 600; color: var(--ink-1); }
-    .fov-chip {
+    .fov-chip-pill {
         display: inline-block; padding: .1rem .45rem;
         font-family: var(--mono); font-size: .65rem;
         text-transform: uppercase; letter-spacing: .08em;
@@ -176,10 +300,12 @@
     }
     .fov-trend.up { color: var(--up); background: var(--up-dim); }
     .fov-trend.down { color: var(--down); background: var(--down-dim); }
+    .fov-trend.neutral { color: var(--ink-3); background: var(--bg-3); }
     .fov-trend.muted { color: var(--ink-4); }
 
-    /* Sector + grid */
+    /* Sector + chart grid */
     .fov-sector { margin-bottom: 2.25rem; }
+    .fov-sector.hidden { display: none; }
     .fov-sector-head {
         display: flex; align-items: baseline; justify-content: space-between;
         margin-bottom: .85rem;
@@ -200,6 +326,7 @@
         scroll-margin-top: 80px;
         transition: border-color .15s, box-shadow .15s;
     }
+    .fov-card.hidden { display: none; }
     .fov-card:hover { border-color: var(--line-3); }
     .fov-card.flash { box-shadow: 0 0 0 2px var(--signature-dim); }
     .fov-card-head {
@@ -228,15 +355,87 @@
         color: var(--ink-4); background: var(--bg-2);
         border-radius: 4px;
     }
+
+    /* Sim panel */
+    .sim-form { padding: 1rem 1rem .85rem; }
+    .sim-input-row {
+        display: grid; gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .sim-input { display: flex; flex-direction: column; gap: .3rem; }
+    .sim-input-field {
+        display: flex; align-items: center; gap: .4rem;
+        border: 1px solid var(--line-2); border-radius: 4px;
+        background: var(--bg-1); padding: 0 .55rem;
+        transition: border-color .12s;
+    }
+    .sim-input-field:focus-within { border-color: var(--signature); }
+    .sim-input-field input {
+        flex: 1; border: 0; outline: 0; background: transparent;
+        font-family: var(--mono); font-size: .9rem; font-variant-numeric: tabular-nums;
+        color: var(--ink-1); padding: .4rem 0;
+    }
+    .sim-prefix, .sim-suffix {
+        font-family: var(--mono); font-size: .8rem; color: var(--ink-3);
+    }
+    .sim-input select { font-family: var(--mono); }
+    .sim-formula {
+        margin-top: .85rem; padding-top: .75rem;
+        border-top: 1px solid var(--line-1);
+        font-family: var(--mono); font-size: .7rem; color: var(--ink-3);
+    }
+    .sim-formula code {
+        background: var(--bg-3); padding: .1rem .35rem; border-radius: 3px;
+        color: var(--ink-1);
+    }
+    .sim-table tbody td { font-variant-numeric: tabular-nums; }
+    .sim-table tbody tr.skipped td { color: var(--ink-4); }
+    .sim-totals-row td {
+        font-weight: 600; border-top: 2px solid var(--line-2) !important;
+        background: var(--bg-2);
+    }
+    .sim-side {
+        display: inline-block; padding: .1rem .5rem; border-radius: 3px;
+        font-family: var(--mono); font-size: .65rem;
+        text-transform: uppercase; letter-spacing: .1em;
+    }
+    .sim-side.long { color: var(--up); background: var(--up-dim); }
+    .sim-side.short { color: var(--down); background: var(--down-dim); }
+    .sim-side.skip { color: var(--ink-4); background: var(--bg-3); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="{{ url_for('static', path='js/charts.js') }}"></script>
 <script>
 (function () {
-    let currentMode = "curve";
-    let payload = null;                  // {symbol: {last, trend_pct, curve_chart, term_chart}}
-    const charts = new Map();            // canvasId → Chart instance
+    // ── State ──
+    let mode = "curve";                  // curve | term | sim
+    let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, curve_chart, term_chart}}
+    const charts = new Map();
+    const filters = { sector: "all", trend: "all" };
 
+    // ── Helpers ──
+    function fmt4g(v) {
+        if (v == null || !isFinite(v)) return "—";
+        const a = Math.abs(v);
+        if (a >= 1000) return v.toFixed(0);
+        if (a >= 1) return v.toFixed(2);
+        return v.toPrecision(4);
+    }
+    function fmtMoney(v) {
+        if (v == null || !isFinite(v)) return "—";
+        return "$" + Math.round(v).toLocaleString("en-US");
+    }
+    function fmtInt(v) {
+        if (v == null || !isFinite(v)) return "—";
+        return Math.round(v).toLocaleString("en-US");
+    }
+    function parseMoney(s) {
+        const cleaned = String(s).replace(/[^0-9.\-]/g, "");
+        const n = parseFloat(cleaned);
+        return isFinite(n) ? n : NaN;
+    }
+
+    // ── Chart mount / destroy ──
     function destroyAll() {
         charts.forEach(c => { try { c.destroy(); } catch (e) {} });
         charts.clear();
@@ -245,14 +444,14 @@
                 !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("chart-"));
         }
     }
-
-    function mountAll(mode) {
+    function mountCharts(which) {
         destroyAll();
         if (!payload) return;
         document.querySelectorAll(".fov-card").forEach(card => {
+            if (card.classList.contains("hidden")) return;
             const sym = card.dataset.symbol;
             const entry = payload[sym]; if (!entry) return;
-            const data = mode === "term" ? entry.term_chart : entry.curve_chart;
+            const data = which === "term" ? entry.term_chart : entry.curve_chart;
             const canvas = card.querySelector("canvas"); if (!canvas || !data) return;
             const skel = card.querySelector(".fov-skeleton"); if (skel) skel.style.display = "none";
             canvas.style.display = "";
@@ -261,69 +460,116 @@
         });
     }
 
-    function fmt4g(v) {
-        if (v == null || !isFinite(v)) return "—";
-        const a = Math.abs(v);
-        if (a >= 1000) return v.toFixed(0);
-        if (a >= 1) return v.toFixed(2);
-        return v.toPrecision(4);
+    // ── Hydrate table + cards from payload ──
+    function trendBadge(sig) {
+        if (sig === 1)  return '<span class="fov-trend up"><i class="bi bi-arrow-up-right"></i> up</span>';
+        if (sig === -1) return '<span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>';
+        return '<span class="fov-trend neutral">neutral</span>';
     }
-
-    function hydrateTableAndCards() {
+    function hydrate() {
         if (!payload) return;
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
             const sym = tr.dataset.sym;
             const entry = payload[sym]; if (!entry) return;
-            const last = entry.last, tp = entry.trend_pct;
-            if (last != null) {
-                tr.dataset.last = String(last);
-                tr.querySelector(".fov-cell-last").textContent = fmt4g(last);
+            const sig = entry.trend_signal == null ? 0 : entry.trend_signal;
+            tr.dataset.trendSignal = String(sig);
+            if (entry.last != null) {
+                tr.dataset.last = String(entry.last);
+                tr.querySelector(".fov-cell-last").textContent = fmt4g(entry.last);
             }
-            if (tp != null) {
-                tr.dataset.trend = String(tp);
-                const pct = (tp * 100).toFixed(2) + "%";
-                const sign = tp >= 0 ? "+" : "";
+            if (entry.trend_pct != null) {
+                tr.dataset.trend = String(entry.trend_pct);
+                const pct = (entry.trend_pct * 100).toFixed(2) + "%";
+                const sign = entry.trend_pct >= 0 ? "+" : "";
                 const cell = tr.querySelector(".fov-cell-trendpct");
                 cell.textContent = sign + pct;
-                cell.classList.add(tp >= 0 ? "text-up" : "text-down");
-                const badge = tr.querySelector(".fov-cell-trend");
-                badge.innerHTML = tp >= 0
-                    ? '<span class="fov-trend up"><i class="bi bi-arrow-up-right"></i> up</span>'
-                    : '<span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>';
+                cell.classList.add(entry.trend_pct >= 0 ? "text-up" : "text-down");
             }
+            tr.querySelector(".fov-cell-trend").innerHTML = trendBadge(sig);
         });
-        // Card headers
         document.querySelectorAll(".fov-card").forEach(card => {
             const sym = card.dataset.symbol;
             const entry = payload[sym]; if (!entry) return;
-            const tp = entry.trend_pct;
+            card.dataset.trendSignal = String(entry.trend_signal == null ? 0 : entry.trend_signal);
             const trEl = card.querySelector(".fov-card-trend");
-            if (tp != null) {
-                trEl.textContent = (tp >= 0 ? "+" : "") + (tp * 100).toFixed(2) + "%";
+            if (entry.trend_pct != null) {
+                trEl.textContent = (entry.trend_pct >= 0 ? "+" : "") + (entry.trend_pct * 100).toFixed(2) + "%";
                 trEl.classList.remove("muted");
-                trEl.classList.add(tp >= 0 ? "up" : "down");
+                trEl.classList.add(entry.trend_pct >= 0 ? "up" : "down");
             }
             if (entry.last != null) {
                 const lastEl = card.querySelector(".fov-card-last");
                 if (lastEl) lastEl.innerHTML = "last <strong>" + fmt4g(entry.last) + "</strong>";
             }
         });
-        // Default sort within each sector card group: by trend desc
         sortTable("trend", "desc");
     }
 
-    window.setMode = function (mode) {
-        if (mode === currentMode) return;
-        currentMode = mode;
+    // ── Filter application ──
+    function passes(sector, sigStr) {
+        if (filters.sector !== "all" && sector !== filters.sector) return false;
+        if (filters.trend === "up" && sigStr !== "1") return false;
+        if (filters.trend === "down" && sigStr !== "-1") return false;
+        if (filters.trend === "neutral" && sigStr !== "0" && sigStr !== "") return false;
+        return true;
+    }
+    function applyFilters() {
+        // table rows
+        document.querySelectorAll("#fov-tbody tr").forEach(tr => {
+            const ok = passes(tr.dataset.sector, tr.dataset.trendSignal || "");
+            tr.classList.toggle("hidden", !ok);
+        });
+        // cards
+        document.querySelectorAll(".fov-card").forEach(card => {
+            const ok = passes(card.dataset.sector, card.dataset.trendSignal || "");
+            card.classList.toggle("hidden", !ok);
+        });
+        // sectors: hide empty
+        document.querySelectorAll(".fov-sector").forEach(sec => {
+            const cards = sec.querySelectorAll(".fov-card");
+            const visible = Array.from(cards).filter(c => !c.classList.contains("hidden"));
+            sec.classList.toggle("hidden", visible.length === 0);
+            const cn = sec.querySelector(".fov-sec-count");
+            if (cn) cn.textContent = visible.length + " market" + (visible.length === 1 ? "" : "s");
+        });
+        if (mode === "curve" || mode === "term") mountCharts(mode);
+        if (mode === "sim") renderSim();
+    }
+    document.querySelectorAll("#fov-sector-chips .fov-chip").forEach(b => {
+        b.addEventListener("click", () => {
+            document.querySelectorAll("#fov-sector-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            b.classList.add("active");
+            filters.sector = b.dataset.sector;
+            applyFilters();
+        });
+    });
+    document.querySelectorAll("#fov-trend-chips .fov-chip").forEach(b => {
+        b.addEventListener("click", () => {
+            document.querySelectorAll("#fov-trend-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            b.classList.add("active");
+            filters.trend = b.dataset.trend;
+            applyFilters();
+        });
+    });
+
+    // ── Mode switching ──
+    window.setMode = function (m) {
+        if (m === mode) return;
+        mode = m;
         document.querySelectorAll(".fov-tab").forEach(t =>
-            t.classList.toggle("active", t.dataset.mode === mode));
+            t.classList.toggle("active", t.dataset.mode === m));
         document.getElementById("fov-mode-hint").textContent =
-            mode === "curve" ? "close, back-adj · EMA(50), EMA(100)"
-                             : "forward curve at the latest date, near→far by DTE";
-        mountAll(mode);
+            m === "curve" ? "close, back-adj · EMA(50), EMA(100)" :
+            m === "term"  ? "forward curve at the latest date, near→far by DTE" :
+                            "size positions by ATR(100) and point value";
+        document.getElementById("fov-charts").style.display = (m === "sim") ? "none" : "";
+        document.getElementById("fov-sim").style.display = (m === "sim") ? "" : "none";
+        if (m === "sim") renderSim();
+        else mountCharts(m);
     };
 
     window.scrollToCard = function (sym) {
+        if (mode === "sim") setMode("curve");
         const el = document.getElementById("card-" + sym);
         if (!el) return;
         el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -363,22 +609,126 @@
         th.addEventListener("click", () => {
             const key = th.dataset.key;
             const curr = th.dataset.dir || (key === "trend" ? "desc" : "asc");
-            const next = curr === "asc" ? "desc" : "asc";
-            sortTable(key, next);
+            sortTable(key, curr === "asc" ? "desc" : "asc");
         });
     });
 
-    // ── Async payload fetch + mount ──
+    // ── Sim ──
+    function readSimInputs() {
+        const eq = parseMoney(document.getElementById("sim-equity").value);
+        const rp = parseFloat(document.getElementById("sim-risk").value) / 100;
+        const mo = document.getElementById("sim-mode").value;
+        return { equity: eq, risk: rp, simMode: mo };
+    }
+    function renderSim() {
+        const tbody = document.getElementById("sim-tbody");
+        if (!payload) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Loading market data…</td></tr>';
+            return;
+        }
+        const { equity, risk, simMode } = readSimInputs();
+        if (!isFinite(equity) || equity <= 0 || !isFinite(risk) || risk <= 0) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">Enter a positive account size and risk percentage.</td></tr>';
+            document.getElementById("sim-totals").textContent = "";
+            return;
+        }
+        const targetDaily = risk * equity;
+        // Universe = visible rows after filters
+        const visibleSyms = new Set(
+            Array.from(document.querySelectorAll("#fov-tbody tr"))
+                 .filter(tr => !tr.classList.contains("hidden"))
+                 .map(tr => tr.dataset.sym)
+        );
+        const rows = [];
+        let totalNotional = 0, totalRisk = 0, used = 0;
+        Object.keys(payload).forEach(sym => {
+            if (!visibleSyms.has(sym)) return;
+            const e = payload[sym];
+            const tr = document.querySelector(`#fov-tbody tr[data-sym="${sym}"]`);
+            const sector = tr ? tr.dataset.sector : "";
+            const name = tr ? tr.dataset.name : sym;
+            // Decide side
+            let side = 0;
+            if (simMode === "long")        side = e.trend_signal === 1 ? 1 : 0;
+            else if (simMode === "short")  side = e.trend_signal === -1 ? -1 : 0;
+            else                            side = e.trend_signal;  // diversified
+            // Compute contracts only if we have all the inputs and a side
+            let contracts = null, notional = null, dailyRisk = null;
+            if (side !== 0 && e.atr100 != null && e.multiplier != null && e.atr100 > 0 && e.multiplier > 0) {
+                contracts = Math.round(targetDaily / (e.atr100 * e.multiplier));
+                notional = contracts * e.multiplier * (e.last || 0);
+                dailyRisk = contracts * e.atr100 * e.multiplier;
+            }
+            rows.push({ sym, name, sector, side, atr: e.atr100, mult: e.multiplier, last: e.last, contracts, notional, dailyRisk });
+            if (contracts != null && contracts > 0) {
+                totalNotional += Math.abs(notional);
+                totalRisk += dailyRisk;
+                used += 1;
+            }
+        });
+        rows.sort((a, b) => (b.contracts || 0) - (a.contracts || 0));
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">No markets match the current filters.</td></tr>';
+            document.getElementById("sim-totals").textContent = "";
+            return;
+        }
+
+        tbody.innerHTML = rows.map(r => {
+            const sideCls = r.side === 1 ? "long" : r.side === -1 ? "short" : "skip";
+            const sideTxt = r.side === 1 ? "LONG" : r.side === -1 ? "SHORT" : "—";
+            const skipped = (r.contracts == null) ? " skipped" : "";
+            return `<tr class="${skipped}">
+                <td class="fov-sym">${r.sym}</td>
+                <td>${r.name}</td>
+                <td><span class="fov-chip-pill">${r.sector}</span></td>
+                <td><span class="sim-side ${sideCls}">${sideTxt}</span></td>
+                <td class="text-end">${fmt4g(r.atr)}</td>
+                <td class="text-end">${fmt4g(r.mult)}</td>
+                <td class="text-end">${fmt4g(r.last)}</td>
+                <td class="text-end">${r.contracts != null ? fmtInt(r.contracts) : "—"}</td>
+                <td class="text-end">${r.notional != null ? fmtMoney(r.notional) : "—"}</td>
+                <td class="text-end">${r.dailyRisk != null ? fmtMoney(r.dailyRisk) : "—"}</td>
+            </tr>`;
+        }).join("") +
+        `<tr class="sim-totals-row">
+            <td colspan="7" class="text-end">Total (${used} position${used === 1 ? "" : "s"} sized)</td>
+            <td></td>
+            <td class="text-end">${fmtMoney(totalNotional)}</td>
+            <td class="text-end">${fmtMoney(totalRisk)}</td>
+        </tr>`;
+
+        document.getElementById("sim-totals").textContent =
+            `target $${Math.round(targetDaily).toLocaleString("en-US")} / position · realised total $${Math.round(totalRisk).toLocaleString("en-US")}`;
+    }
+    // Live re-render on input change
+    ["sim-equity", "sim-risk", "sim-mode"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", renderSim);
+        if (el) el.addEventListener("change", renderSim);
+    });
+    // Auto-format equity field with thousands separators on blur
+    const eqEl = document.getElementById("sim-equity");
+    if (eqEl) eqEl.addEventListener("blur", () => {
+        const n = parseMoney(eqEl.value);
+        if (isFinite(n) && n > 0) eqEl.value = Math.round(n).toLocaleString("en-US");
+    });
+
+    // ── Async payload fetch ──
     function loadPayload() {
         fetch("/futures/api/payload", { headers: { "Accept": "application/json" } })
             .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
             .then(p => {
                 payload = p;
                 document.getElementById("fov-load-state").classList.add("done");
-                hydrateTableAndCards();
-                if (window.Chart && window.LangeChart) mountAll(currentMode);
-                else {
-                    const wait = () => (window.Chart && window.LangeChart) ? mountAll(currentMode) : setTimeout(wait, 50);
+                hydrate();
+                applyFilters();
+                if (window.Chart && window.LangeChart) {
+                    if (mode !== "sim") mountCharts(mode);
+                } else {
+                    const wait = () => (window.Chart && window.LangeChart)
+                        ? (mode !== "sim" ? mountCharts(mode) : null)
+                        : setTimeout(wait, 50);
                     wait();
                 }
             })
@@ -390,7 +740,7 @@
             });
     }
     loadPayload();
-    document.addEventListener("themechange", () => { if (payload) setTimeout(() => mountAll(currentMode), 30); });
+    document.addEventListener("themechange", () => { if (payload && mode !== "sim") setTimeout(() => mountCharts(mode), 30); });
 })();
 </script>
 {% endif %}

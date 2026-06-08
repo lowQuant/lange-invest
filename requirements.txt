@@ -6,6 +6,7 @@ python-multipart>=0.0.6
 itsdangerous>=2.1          # signed session cookies
 pyotp>=2.9                 # TOTP 2FA
 markdown>=3.5             # article rendering
+a2wsgi>=1.10               # ASGI->WSGI adapter (PythonAnywhere web tab)
 
 # Engine (vendored core/ from arcticdb-viewer) + MCP tools
 arcticdb>=6.0

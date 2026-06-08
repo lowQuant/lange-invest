@@ -65,15 +65,12 @@ def _import_viewer_app():
 
 
 def _fallback_app() -> Starlette:
-    async def info(request: Request):
-        return HTMLResponse(
-            "<h3>Admin · ArcticDB Viewer</h3>"
-            "<p>The viewer app is not importable in this environment. Install it "
-            "(<code>pip install git+https://github.com/lowQuant/arcticdb-viewer</code>) "
-            "or set <code>ADMIN_VIEWER_PATH</code> to a checkout, then restart.</p>"
-        )
+    # The standalone arcticdb-viewer isn't installed — admins use the in-app
+    # ArcticDB tab (full CRUD) instead, so send /admin there.
+    async def to_arcticdb(request: Request):
+        return RedirectResponse("/arcticdb", status_code=303)
 
-    return Starlette(routes=[Route("/{path:path}", info)])
+    return Starlette(routes=[Route("/{path:path}", to_arcticdb)])
 
 
 def build_admin_app():
@@ -81,6 +78,7 @@ def build_admin_app():
     try:
         viewer = _import_viewer_app()
     except Exception as exc:  # noqa: BLE001
-        print(f"[admin] viewer app unavailable ({exc!r}); mounting fallback.")
+        print(f"[admin] standalone viewer not installed ({type(exc).__name__}); "
+              f"/admin redirects to the in-app ArcticDB tab.")
         viewer = _fallback_app()
     return AdminAuthGuard(viewer)

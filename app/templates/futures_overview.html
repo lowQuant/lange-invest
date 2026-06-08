@@ -693,19 +693,25 @@
                 used += 1;
             }
         });
-        rows.sort((a, b) => (b.contracts || 0) - (a.contracts || 0));
+        // Keep only rows we actually sized; sum the rest as a footer note so the
+        // user knows their universe is bigger than what the table shows.
+        const sized = rows.filter(r => r.contracts != null && r.contracts > 0);
+        const skipped = rows.length - sized.length;
+        sized.sort((a, b) => (b.contracts || 0) - (a.contracts || 0));
 
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">No markets match the current filters.</td></tr>';
+        if (!sized.length) {
+            const reason = skipped > 0
+                ? `All ${skipped} markets in scope are either too small to size at $${Math.round(targetDaily).toLocaleString("en-US")} / position or have no trend signal.`
+                : "No markets match the current filters.";
+            tbody.innerHTML = `<tr><td colspan="10" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${reason}</td></tr>`;
             document.getElementById("sim-totals").textContent = "";
             return;
         }
 
-        tbody.innerHTML = rows.map(r => {
-            const sideCls = r.side === 1 ? "long" : r.side === -1 ? "short" : "skip";
-            const sideTxt = r.side === 1 ? "LONG" : r.side === -1 ? "SHORT" : "—";
-            const skipped = (r.contracts == null) ? " skipped" : "";
-            return `<tr class="${skipped}">
+        tbody.innerHTML = sized.map(r => {
+            const sideCls = r.side === 1 ? "long" : "short";
+            const sideTxt = r.side === 1 ? "LONG" : "SHORT";
+            return `<tr>
                 <td class="fov-sym">${r.sym}</td>
                 <td>${r.name}</td>
                 <td><span class="fov-chip-pill">${r.sector}</span></td>
@@ -713,20 +719,21 @@
                 <td class="text-end">${fmt4g(r.atr)}</td>
                 <td class="text-end">${fmt4g(r.mult)}</td>
                 <td class="text-end">${fmt4g(r.last)}</td>
-                <td class="text-end">${r.contracts != null ? fmtInt(r.contracts) : "—"}</td>
-                <td class="text-end">${r.notional != null ? fmtMoney(r.notional) : "—"}</td>
-                <td class="text-end">${r.dailyRisk != null ? fmtMoney(r.dailyRisk) : "—"}</td>
+                <td class="text-end">${fmtInt(r.contracts)}</td>
+                <td class="text-end">${fmtMoney(r.notional)}</td>
+                <td class="text-end">${fmtMoney(r.dailyRisk)}</td>
             </tr>`;
         }).join("") +
         `<tr class="sim-totals-row">
-            <td colspan="7" class="text-end">Total (${used} position${used === 1 ? "" : "s"} sized)</td>
+            <td colspan="7" class="text-end">Total (${used} sized${skipped > 0 ? `, ${skipped} skipped` : ""})</td>
             <td></td>
             <td class="text-end">${fmtMoney(totalNotional)}</td>
             <td class="text-end">${fmtMoney(totalRisk)}</td>
         </tr>`;
 
+        const skipNote = skipped > 0 ? ` · ${skipped} below 1 contract` : "";
         document.getElementById("sim-totals").textContent =
-            `target $${Math.round(targetDaily).toLocaleString("en-US")} / position · realised total $${Math.round(totalRisk).toLocaleString("en-US")}`;
+            `target $${Math.round(targetDaily).toLocaleString("en-US")} / position · realised total $${Math.round(totalRisk).toLocaleString("en-US")}${skipNote}`;
     }
     // Live re-render on input change
     ["sim-equity", "sim-risk", "sim-mode"].forEach(id => {

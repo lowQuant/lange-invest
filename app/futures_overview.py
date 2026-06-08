@@ -35,6 +35,14 @@ SECTOR_COLS = ("asset_class", "sector", "category", "assetClass")
 MULTIPLIER_COLS = ("multiplier", "point_value", "contract_size", "contractMultiplier")
 NAME_COLS = ("name", "description", "long_name")
 
+# Heuristic guards against the micro-contract failure mode: instruments with
+# only a handful of rolls (e.g. recently-launched micro grains) produce a
+# back-adjusted series with a huge leading spike that ruins the y-axis. Drop
+# the symbol entirely if it's too short or the series spans more than an order
+# of magnitude — that range is wider than any real, healthy futures curve.
+MIN_HISTORY_POINTS = 150
+MAX_BACK_ADJ_RATIO = 10.0
+
 
 def invalidate_cache() -> None:
     _META_CACHE.clear()
@@ -145,10 +153,35 @@ def _atr100(ohlc: pd.DataFrame | None) -> float | None:
     return float(atr.iloc[-1]) if len(atr) else None
 
 
+def _curve_is_usable(curve_main: dict | None) -> bool:
+    """Drop symbols whose back-adjusted series is too short or out of scale.
+
+    Catches the micro-contract case where a sparse roll history produces a
+    leading spike (first value 50–100× the latest), which both pollutes the
+    EMAs and crushes the y-axis.
+    """
+    if not curve_main or not curve_main.get("datasets"):
+        return False
+    raw = curve_main["datasets"][0].get("data", [])
+    valid = [v for v in raw if v is not None and isinstance(v, (int, float))]
+    if len(valid) < MIN_HISTORY_POINTS:
+        return False
+    first, last = abs(valid[0]), abs(valid[-1])
+    if first == 0 or last == 0:
+        return False
+    ratio = max(first / last, last / first)
+    return ratio <= MAX_BACK_ADJ_RATIO
+
+
 # ── Per-symbol compute ───────────────────────────────────────────────────────
 
 def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
-    """Continuous curve + term structure + trend + ATR(100) for one root."""
+    """Continuous curve + term structure + trend + ATR(100) for one root.
+
+    Returns ``None`` for symbols we should hide from the page entirely —
+    unreadable, not a MultiIndex future, or with too few/too erratic back-
+    adjusted observations to chart meaningfully.
+    """
     try:
         df = public_access.read_data("futures", symbol)
     except Exception:  # noqa: BLE001
@@ -175,6 +208,11 @@ def _compute_for_symbol(symbol: str) -> dict[str, Any] | None:
             curve_main = None
     except Exception:  # noqa: BLE001
         curve_main = None
+
+    # Drop the symbol if the continuous curve is unusable (no data, too short
+    # or the back-adjustment produced a leading spike from sparse rolls).
+    if not _curve_is_usable(curve_main):
+        return None
 
     try:
         term_main, _, term_err = ac.build_chart(df, symbol, {

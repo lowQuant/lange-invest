@@ -466,8 +466,31 @@
         if (sig === -1) return '<span class="fov-trend down"><i class="bi bi-arrow-down-right"></i> down</span>';
         return '<span class="fov-trend neutral">neutral</span>';
     }
+    function pruneMissing() {
+        // Remove rows/cards for symbols the server filtered out (no usable
+        // data, sparse-roll micro-contracts, etc.) so they don't sit as
+        // empty dashes forever.
+        if (!payload) return;
+        document.querySelectorAll("#fov-tbody tr").forEach(tr => {
+            if (!payload[tr.dataset.sym]) tr.remove();
+        });
+        document.querySelectorAll(".fov-card").forEach(card => {
+            if (!payload[card.dataset.symbol]) card.remove();
+        });
+        document.querySelectorAll(".fov-sector").forEach(sec => {
+            if (!sec.querySelector(".fov-card")) sec.remove();
+        });
+        // Update the page-head counters in place.
+        const rows = document.querySelectorAll("#fov-tbody tr").length;
+        const secs = document.querySelectorAll(".fov-sector").length;
+        const minis = document.querySelectorAll(".page-head .metric-mini .v");
+        if (minis[0]) minis[0].textContent = String(rows);
+        if (minis[1]) minis[1].textContent = String(secs);
+    }
+
     function hydrate() {
         if (!payload) return;
+        pruneMissing();
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
             const sym = tr.dataset.sym;
             const entry = payload[sym]; if (!entry) return;

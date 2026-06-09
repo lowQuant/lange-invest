@@ -176,7 +176,20 @@
                         labels: { color: c.text, font: { family: "'IBM Plex Mono', monospace", size: 11 }, boxWidth: 10, boxHeight: 2, padding: 12 },
                     } : { display: false },
                     zoom: zoomConfig,
-                    tooltip: tooltipStyle,
+                    // When x_extras is present (e.g. term structure: x-axis is expiry,
+                    // extras carry the local contract symbol), surface it as a
+                    // second title line so the contract is one hover away.
+                    tooltip: chartData.x_extras ? {
+                        ...tooltipStyle,
+                        callbacks: {
+                            title: (items) => {
+                                const i = items[0] ? items[0].dataIndex : 0;
+                                const xv = chartData.x_values[i] || "";
+                                const ex = chartData.x_extras[i] || "";
+                                return ex ? [xv, ex] : xv;
+                            },
+                        },
+                    } : tooltipStyle,
                 },
                 interaction: { mode: "index", intersect: false },
             },

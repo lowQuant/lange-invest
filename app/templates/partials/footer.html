@@ -1,19 +1,15 @@
+{# ── End-of-issue colophon ─────────────────────────────────────────────── #}
 <footer class="qt-footer">
     <div class="qt-footer-inner">
         <div>
-            <span class="eyebrow">{{ site.name }}</span>
-            <span class="divider-dot">·</span>
-            {{ site.tagline }}
+            <em>{{ site.name }}</em> &mdash; {{ site.tagline }}
         </div>
-        <div class="d-flex gap-3">
-            <a href="/articles">Articles</a>
-            <a href="/equities">Equities</a>
+        <div class="colophon-nav">
+            <a href="/articles">Research</a>
+            {% if user and user.is_admin %}<a href="/equities">Equities</a>{% endif %}
             <a href="/futures">Futures</a>
-            <a href="/portfolio">Portfolio</a>
-            <a href="/arcticdb">ArcticDB</a>
-        </div>
-        <div class="text-muted">
-            For research/education. Not investment advice. Past performance is not indicative of future results.
+            {% if user and user.is_admin %}<a href="/portfolio">Portfolio</a>{% endif %}
+            <a href="/arcticdb">Data</a>
         </div>
     </div>
 </footer>

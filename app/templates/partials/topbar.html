@@ -1,34 +1,56 @@
-{# Slim top bar: brand + theme/account only. Section nav lives in the sidebar. #}
-<header class="topbar">
-    <a href="/" class="qt-brand">
-        <span class="qt-brand-mark"><span></span><span></span><span></span><span></span></span>
-        lange<span style="color: var(--accent);">·</span>invest
-    </a>
-
-    <div class="topbar-right">
-        <button class="theme-toggle" type="button" onclick="toggleTheme()" title="Toggle theme" aria-label="Toggle theme">
-            <i class="bi bi-sun-fill"></i>
-            <i class="bi bi-moon-stars-fill"></i>
-        </button>
-        {% if user %}
-        <div class="dropdown">
-            <a class="topbar-account dropdown-toggle" data-bs-toggle="dropdown" href="#">
-                <span class="status-dot" title="Signed in"></span>
-                <span>{{ user.username }}</span>
+{# ── Masthead ───────────────────────────────────────────────────────────────
+   Quiet serif wordmark on the left, theme toggle + account on the right;
+   the section nav lives below on a single hairline strip. #}
+{% set _nav = nav_active or '' %}
+<header class="masthead">
+    <div class="masthead-inner">
+        <div class="masthead-row">
+            <a href="/" class="masthead-name" aria-label="{{ site.name }} home">
+                <span class="wordmark-part">Lange</span><span class="wordmark-slash">&thinsp;/&thinsp;</span><span class="wordmark-part">Invest</span>
             </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li class="px-2 py-1 eyebrow">{{ user.role }}</li>
-                {% if user.is_admin %}
-                <li><a class="dropdown-item" href="/admin"><i class="bi bi-sliders"></i> Admin · Viewer</a></li>
-                <li><hr class="dropdown-divider"></li>
+
+            <div class="masthead-right">
+                <button class="theme-toggle" type="button" onclick="toggleTheme()"
+                        title="Toggle reading mode" aria-label="Toggle reading mode">
+                    <i class="bi bi-sun-fill"></i>
+                    <i class="bi bi-moon-stars-fill"></i>
+                </button>
+                {% if user %}
+                <div class="dropdown">
+                    <a class="masthead-account dropdown-toggle" data-bs-toggle="dropdown" href="#">
+                        <span class="status-dot" title="Signed in"></span>
+                        <span>{{ user.username }}</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li class="px-3 py-1 label-mono">{{ user.role }}</li>
+                        {% if user.is_admin %}
+                        <li><a class="dropdown-item" href="/admin"><i class="bi bi-sliders"></i> Admin &middot; Viewer</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        {% endif %}
+                        <li><form method="post" action="/logout">
+                            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-power"></i> Sign out</button>
+                        </form></li>
+                    </ul>
+                </div>
+                {% else %}
+                <a class="masthead-signin" href="/login">Sign in &rarr;</a>
                 {% endif %}
-                <li><form method="post" action="/logout">
-                    <button type="submit" class="dropdown-item text-danger"><i class="bi bi-power"></i> Sign out</button>
-                </form></li>
-            </ul>
+            </div>
         </div>
-        {% else %}
-        <a class="btn btn-sm btn-outline-secondary" href="/login"><i class="bi bi-box-arrow-in-right"></i> Sign in</a>
-        {% endif %}
+
+        {# Equities and Portfolio are not yet populated; surface them only to
+           admins until they have real content. #}
+        {% set _is_admin = user and user.is_admin %}
+        <nav class="masthead-nav" aria-label="Sections">
+            <a class="masthead-nav-link {% if _nav == 'articles' %}active{% endif %}"  href="/articles">Research</a>
+            {% if _is_admin %}
+            <a class="masthead-nav-link {% if _nav == 'equities' %}active{% endif %}"  href="/equities">Equities</a>
+            {% endif %}
+            <a class="masthead-nav-link {% if _nav == 'futures' %}active{% endif %}"   href="/futures">Futures</a>
+            {% if _is_admin %}
+            <a class="masthead-nav-link {% if _nav == 'portfolio' %}active{% endif %}" href="/portfolio">Portfolio</a>
+            {% endif %}
+            <a class="masthead-nav-link {% if _nav == 'arcticdb' %}active{% endif %}"  href="/arcticdb">Data</a>
+        </nav>
     </div>
 </header>

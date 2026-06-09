@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Articles — {{ site.name }}{% endblock %}
+{% block title %}Research &mdash; {{ site.name }}{% endblock %}
 {% block meta_description %}Research notes and strategy write-ups from {{ site.name }}.{% endblock %}
 
 {% block content %}
 <div class="page-head">
     <div>
-        <span class="eyebrow">Research</span>
-        <h1>Articles</h1>
+        <span class="eyebrow">From the desk</span>
+        <h1>Research</h1>
+        <p class="lead">Notes, write-ups, and post-mortems on the systematic strategies behind the books.</p>
     </div>
-    <div class="d-flex align-items-center gap-2">
-        {% if articles %}<span class="label-mono">{{ articles | length }} posts</span>{% endif %}
+    <div class="d-flex align-items-center gap-3">
+        {% if articles %}<span class="label-mono">{{ articles | length }} entries</span>{% endif %}
         {% if user and user.is_admin %}<a href="/articles/new" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg"></i> New article</a>{% endif %}
     </div>
 </div>
@@ -24,14 +25,14 @@
         <div class="year-head"><span>{{ yr }}</span></div>
     {% endif %}
     <div class="article-row" style="position:relative;">
-        <a href="/articles/{{ a.slug }}" class="ar-date" style="text-decoration:none;">{{ a.date_display.split(',')[0] if a.date else '' }}</a>
+        <a href="/articles/{{ a.slug }}" class="ar-date">{{ a.date_display.split(',')[0] if a.date else '' }}</a>
         <div class="ar-body">
             {% if a.category %}<span class="ar-cat">{{ a.category }}</span>{% endif %}
-            <a href="/articles/{{ a.slug }}" class="ar-title" style="text-decoration:none;">{{ a.title }}</a>
+            <a href="/articles/{{ a.slug }}" class="ar-title">{{ a.title }}</a>
             {% if a.summary %}<span class="ar-sum">{{ a.summary }}</span>{% endif %}
         </div>
         {% if user and user.is_admin %}
-        <div style="position:absolute; top:.6rem; right:.25rem;" class="d-flex gap-1">
+        <div style="position:absolute; top:.9rem; right:.25rem;" class="d-flex gap-1">
             <a href="/articles/{{ a.slug }}/edit" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
             <button class="btn btn-sm btn-outline-danger" title="Delete"
                     hx-delete="/articles/{{ a.slug }}" hx-confirm="Delete '{{ a.title }}'?"

@@ -8,7 +8,10 @@ The loaded config is cached; call :func:`reload` in tests to pick up changes.
 from __future__ import annotations
 
 import os
-import tomllib
+try:
+    import tomllib  # py3.11+ stdlib
+except ModuleNotFoundError:  # py3.10 — pythonanywhere defaults to this on some plans
+    import tomli as tomllib  # type: ignore[no-redef]
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path

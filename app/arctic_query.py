@@ -140,6 +140,27 @@ def _apply_single_filter(df: pd.DataFrame, col: str, op: str, val: str) -> pd.Da
     return df
 
 
+def apply_chart_filters(df: pd.DataFrame, query: dict) -> pd.DataFrame:
+    """Apply only the row-selecting parts of a query (filters + limit) to df.
+
+    Used by the chart endpoint so charts respect the user's table filter without
+    reshaping the data. Skips group_by / columns / sort, which would either
+    flatten a MultiIndex or reorder the x-axis in a way that doesn't make sense
+    for time-series plotting.
+    """
+    if not query:
+        return df
+    for f in query.get("filters", []):
+        col, op, val = f.get("col", ""), f.get("op", ""), f.get("val", "")
+        if col and op and val:
+            df = _apply_single_filter(df, col, op, val)
+    limit = query.get("limit")
+    if limit and limit.get("n"):
+        n = int(limit["n"])
+        df = df.tail(n) if limit.get("mode", "first") == "last" else df.head(n)
+    return df
+
+
 def execute_query(df: pd.DataFrame, query: dict) -> tuple[pd.DataFrame, list[str]]:
     """Run the pipeline. Returns (transformed_df, display_columns)."""
     for f in query.get("filters", []):

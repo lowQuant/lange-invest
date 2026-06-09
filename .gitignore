@@ -25,3 +25,6 @@ venv/
 # OS / editor
 .DS_Store
 .claude/
+
+# Article research/drafts (local working folder) — root only, not content/articles/
+/articles/

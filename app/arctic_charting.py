@@ -185,6 +185,64 @@ def build_continuous(df, rank, col, method, roll_rule) -> pd.Series:
     return pd.Series([prices[i] * adj[i] for i in range(n)], index=dates_arr, name=f"cont{rank}_{col}_adjr")
 
 
+def _term_structure(df: pd.DataFrame, col: str) -> tuple[list[str], list[str], list[dict], str]:
+    """Forward curve at the latest date in the (already filtered) view.
+
+    Picks the most recent unique date, sorts that date's live contracts by DTE
+    ascending (nearest expiry first), and returns:
+        x_values  — expiry dates (YYYY-MM-DD), one per point
+        x_extras  — parallel list of local contract symbols (for tooltips)
+        datasets  — single dataset of price-by-contract
+        x_label   — "expiry" if DTE was used, "contract" if we fell back
+    Falls back to alphabetical contract symbols on the x-axis if `dte` is
+    absent.
+    """
+    if not isinstance(df.index, pd.MultiIndex) or col not in df.columns:
+        return [], [], [], "contract"
+    dates = sorted(df.index.get_level_values(0).unique())
+    if not dates:
+        return [], [], [], "contract"
+    latest = dates[-1]
+    try:
+        slab = df.loc[latest]
+    except KeyError:
+        return [], [], [], "contract"
+    if isinstance(slab, pd.Series):
+        slab = slab.to_frame().T
+
+    use_dte = "dte" in slab.columns
+    if use_dte:
+        live = slab[slab["dte"] > 0]
+        ordered = live.sort_values(by="dte").index.tolist()
+    else:
+        ordered = sorted(slab.index.tolist())
+
+    x_values: list[str] = []
+    x_extras: list[str] = []
+    data: list[float | None] = []
+    latest_ts = pd.Timestamp(latest)
+    for c in ordered:
+        v = slab.loc[c, col]
+        if isinstance(v, pd.Series):  # duplicate contract rows on the same date
+            v = v.iloc[0]
+        data.append(float(v) if pd.notna(v) else None)
+        x_extras.append(str(c))
+        if use_dte:
+            dte = slab.loc[c, "dte"]
+            if isinstance(dte, pd.Series):
+                dte = dte.iloc[0]
+            try:
+                expiry = latest_ts + pd.Timedelta(days=int(dte))
+                x_values.append(expiry.strftime("%Y-%m-%d") if pd.notna(expiry) else str(c))
+            except (ValueError, TypeError):
+                x_values.append(str(c))
+        else:
+            x_values.append(str(c))
+
+    label = f"{_fmt_index(latest)} — {col}"
+    return x_values, x_extras, [{"label": label, "data": data}], ("expiry" if use_dte else "contract")
+
+
 def _label(sym, rank, col, method) -> str:
     suffix = {"back_diff": " [adj-Δ]", "back_ratio": " [adj-r]", "perpetual": " [perp]"}.get(method, "")
     if method == "perpetual":
@@ -327,6 +385,13 @@ def build_chart(df: pd.DataFrame, sym: str, p: dict) -> tuple[dict | None, list,
         ds += _study_datasets(ds[0]["data"], p.get("studies", ""))
         main = {"x_values": [_fmt_index(v) for v in s.index], "x_label": "date",
                 "chart_type": chart_type if chart_type != "candlestick" else "line", "datasets": ds}
+    elif is_multi and mode == "term_structure":
+        x_values, x_extras, ds, x_label = _term_structure(df, col)
+        if not ds:
+            return None, [], "Term structure needs a MultiIndex (date, contract) symbol with the chosen column."
+        main = {"x_values": x_values, "x_extras": x_extras, "x_label": x_label,
+                "chart_type": chart_type if chart_type in ("bar", "line", "scatter") else "bar",
+                "datasets": ds}
     elif is_multi and mode == "overlay":
         ds, xv = [], None
         for rank in (int(p.get("spread_rank1", 1)), int(p.get("spread_rank2", 2))):

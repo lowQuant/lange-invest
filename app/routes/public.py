@@ -7,9 +7,10 @@ embedded as HTMX fragments that fall back to an access wall — see app.routes.g
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from app import articles as articles_mod
+from app import futures_overview
 from app.auth import current_user
 from app.config import get_config
 from app import snapshots
@@ -85,8 +86,13 @@ async def robots():
 async def sitemap(request: Request):
     cfg = get_config()
     base = f"https://{cfg.domain}"
-    urls = ["/", "/articles", "/portfolio"]
+    # Only index the surfaces that are actually populated. Equities and
+    # Portfolio are admin-only / not-yet-public.
+    public_slugs = {"futures"}
+    urls = ["/", "/articles"]
     for ac in cfg.asset_classes:
+        if ac.slug not in public_slugs:
+            continue
         urls.append(f"/{ac.slug}")
         urls.extend(f"/{ac.slug}/{v.slug}" for v in ac.variants)
     urls.extend(f"/articles/{a.slug}" for a in articles_mod.list_articles())
@@ -97,6 +103,43 @@ async def sitemap(request: Request):
         f"{items}</urlset>"
     )
     return Response(content=xml, media_type="application/xml")
+
+
+# ── Futures overview ─────────────────────────────────────────────────────────
+# /futures has no strategy variants yet, so it renders a custom data-driven
+# overview (sector-grouped continuous curves + term structures + trend table)
+# instead of the generic asset-class landing. Declared BEFORE the /{ac_slug}
+# catch-all so this route wins.
+#
+# Two-stage render: the page itself only reads metadata (one universe + one
+# symbol list) so it appears instantly. The chart payload is fetched async
+# via /futures/api/payload and cached server-side after first hit.
+@router.get("/futures", response_class=HTMLResponse)
+async def futures_overview_page(request: Request):
+    cfg = get_config()
+    ac = cfg.asset_class("futures")
+    if ac is None:
+        raise HTTPException(status_code=404)
+    data = futures_overview.build_meta()
+    return render(
+        request,
+        "futures_overview.html",
+        nav_active="futures",
+        asset_class=ac,
+        sectors=data["sectors"],
+        rows=data["rows"],
+        error=data["error"],
+    )
+
+
+@router.get("/futures/api/payload")
+async def futures_overview_payload(subset: str = "micro"):
+    """Per-symbol chart data + trend metric, cached. Hydrates the /futures
+    shell. ``subset='micro'`` (default) returns only the micro contracts —
+    much cheaper on cold start; ``subset='all'`` fills in the rest."""
+    if subset not in ("micro", "all"):
+        subset = "all"
+    return JSONResponse(futures_overview.build_chart_payload(subset=subset))
 
 
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────

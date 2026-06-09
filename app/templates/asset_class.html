@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ asset_class.name }} — {{ site.name }}{% endblock %}
+{% block title %}{{ asset_class.name }} &mdash; {{ site.name }}{% endblock %}
 {% block meta_description %}{{ asset_class.blurb }}{% endblock %}
 
 {% block content %}
@@ -13,13 +13,18 @@
 
 {% include "partials/subnav.html" %}
 
-<div class="qt-grid cols-2">
+<div class="entries">
     {% for v in asset_class.variants %}
-    <a class="qt-tile" href="/{{ asset_class.slug }}/{{ v.slug }}">
-        <span class="eyebrow">Strategy</span>
-        <span class="qt-tile-title">{{ v.name }}</span>
-        <span class="qt-tile-blurb">{{ v.blurb }}</span>
-        <span class="qt-tile-meta"><span class="text-muted" style="font-size:.75rem;">View charts &amp; signals <i class="bi bi-arrow-right"></i></span></span>
+    <a class="entry" href="/{{ asset_class.slug }}/{{ v.slug }}">
+        <span class="entry-num">{{ '%02d' | format(loop.index) }}</span>
+        <div class="entry-body">
+            <div class="entry-kicker">{{ asset_class.name }} &middot; Strategy</div>
+            <h3 class="entry-title">{{ v.name }}</h3>
+            <p class="entry-blurb">{{ v.blurb }}</p>
+        </div>
+        <div class="entry-meta">
+            <span class="entry-arrow">view book &mdash;&rarr;</span>
+        </div>
     </a>
     {% endfor %}
 </div>

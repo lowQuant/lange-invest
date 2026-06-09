@@ -1,57 +1,73 @@
 {% extends "base.html" %}
-{% block title %}{{ site.name }} — {{ site.tagline }}{% endblock %}
+{% block title %}{{ site.name }} &mdash; {{ site.tagline }}{% endblock %}
 
 {% block content %}
 <section class="hero">
-    <span class="eyebrow">Systematic investing</span>
-    <h1>Rules-based strategies, documented in the open.</h1>
-    <p class="lead">Every strategy here is a fixed set of rules over a known universe — with its
-       methodology, historical backtest, and drawdowns laid out on the page. The model portfolio is
-       public; the live book is a sign-in away.</p>
-    <div class="hero-actions">
-        <a href="/equities" class="btn btn-primary btn-lg"><i class="bi bi-bar-chart-line"></i> Explore strategies</a>
-        <a href="/articles" class="btn btn-outline-secondary btn-lg">Read the research</a>
+    <div class="hero-main">
+        <h1><em>Uncorrelated by design.</em> Compounded by discipline.</h1>
+    </div>
+    <div class="hero-copy">
+        <p class="lead">
+            Running many uncorrelated edges was once a hedge fund&rsquo;s privilege. Not anymore.
+            This is where I build my own. A collection of ideas. A database. A track record.
+        </p>
+        <div class="hero-actions">
+            {% if user and user.is_admin %}
+            <a href="/portfolio" class="btn btn-primary btn-lg">See the portfolio &rarr;</a>
+            {% else %}
+            <a href="/futures" class="btn btn-primary btn-lg">Explore the futures complex &rarr;</a>
+            {% endif %}
+            <a href="/articles" class="btn btn-outline-secondary btn-lg">Read the research</a>
+        </div>
     </div>
 </section>
 
-<section class="mt-4">
-    <div class="page-head">
-        <div>
-            <h2>Strategies by asset class</h2>
-            <p class="lead">Pick an asset class to see its books, each with a universe and a full backtest.</p>
-        </div>
+<section>
+    <div class="section-head">
+        <h2>Strategies, by asset class</h2>
     </div>
-    <div class="qt-grid cols-2">
-        {% for ac in asset_classes %}
-        <a class="qt-tile" href="/{{ ac.slug }}">
-            <span class="qt-tile-eyebrow eyebrow"><i class="bi {{ ac.icon }}"></i> {{ ac.name }}</span>
-            <span class="qt-tile-title">{{ ac.name }}</span>
-            <span class="qt-tile-blurb">{{ ac.blurb }}</span>
-            <span class="qt-tile-meta">
-                {% for v in ac.variants %}<span class="badge bg-secondary">{{ v.name }}</span>{% endfor %}
-            </span>
+    <div class="entries">
+        {# Skip equities for non-admins until it has real content. #}
+        {% set _visible = asset_classes if (user and user.is_admin) else asset_classes | rejectattr('slug', 'equalto', 'equities') | list %}
+        {% for ac in _visible %}
+        <a class="entry" href="/{{ ac.slug }}">
+            <span class="entry-num">{{ '%02d' | format(loop.index) }}</span>
+            <div class="entry-body">
+                <div class="entry-kicker"><i class="bi {{ ac.icon }}"></i>Asset class</div>
+                <h3 class="entry-title">{{ ac.name }}</h3>
+                <p class="entry-blurb">{{ ac.blurb }}</p>
+            </div>
+            <div class="entry-meta">
+                <span class="entry-arrow">read &mdash;&rarr;</span>
+            </div>
         </a>
         {% endfor %}
     </div>
 </section>
 
-<section class="mt-4">
-    <div class="page-head">
-        <h2>Latest research</h2>
-        <a href="/articles" class="btn btn-sm btn-outline-secondary">All articles <i class="bi bi-arrow-right"></i></a>
+<section>
+    <div class="section-head">
+        <h2>From the research desk</h2>
+        <a href="/articles" class="label-mono" style="text-decoration: none;">All articles &rarr;</a>
     </div>
     {% if recent_articles %}
-    <div class="qt-grid cols-3">
+    <div class="entries">
         {% for a in recent_articles %}
-        <a class="qt-tile" href="/articles/{{ a.slug }}">
-            <span class="eyebrow">{{ a.date_display }}</span>
-            <span class="qt-tile-title">{{ a.title }}</span>
-            <span class="qt-tile-blurb">{{ a.summary }}</span>
+        <a class="entry" href="/articles/{{ a.slug }}">
+            <span class="entry-num">{{ '%02d' | format(loop.index) }}</span>
+            <div class="entry-body">
+                <div class="entry-kicker">{{ a.date_display }}{% if a.category %} &middot; {{ a.category }}{% endif %}</div>
+                <h3 class="entry-title">{{ a.title }}</h3>
+                {% if a.summary %}<p class="entry-blurb">{{ a.summary }}</p>{% endif %}
+            </div>
+            <div class="entry-meta">
+                <span class="entry-arrow">read &mdash;&rarr;</span>
+            </div>
         </a>
         {% endfor %}
     </div>
     {% else %}
-    <p class="text-muted">No articles published yet.</p>
+    <p class="text-muted"><em>No articles published yet.</em></p>
     {% endif %}
 </section>
 {% endblock %}

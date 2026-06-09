@@ -107,8 +107,12 @@ async def api_chart(request: Request, library: str, symbol: str):
         raise HTTPException(status_code=404)
     ensure_connected()
     params = dict(request.query_params)
+    from app import arctic_query
+    q = arctic_query.parse_query(params.get("query", ""))
     try:
         df = _read(request, library, symbol)
+        if q:
+            df = arctic_query.apply_chart_filters(df, q)
         main, subplots, err = ac.build_chart(df, symbol, params)
     except public_access.AccessDenied:
         raise HTTPException(status_code=404)

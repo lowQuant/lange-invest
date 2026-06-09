@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block shell_class %}narrow{% endblock %}
-{% block title %}{{ article.title }} — {{ site.name }}{% endblock %}
+{% block shell_class %}reading{% endblock %}
+{% block title %}{{ article.title }} &mdash; {{ site.name }}{% endblock %}
 {% block meta_description %}{{ article.summary }}{% endblock %}
 {% block og_type %}article{% endblock %}
 {% block og_extra %}
@@ -9,10 +9,10 @@
 {% endblock %}
 
 {% block content %}
-<nav class="breadcrumb mb-3"><a href="/articles">Articles</a></nav>
+<nav class="breadcrumb"><a href="/articles">&larr; Research</a></nav>
 <article class="prose">
-    <span class="eyebrow">{{ article.date_display }}{% for t in article.tags %} · {{ t }}{% endfor %}</span>
-    <h1 class="mt-1 mb-4">{{ article.title }}</h1>
+    <span class="eyebrow">{{ article.date_display }}{% for t in article.tags %} &middot; {{ t }}{% endfor %}</span>
+    <h1>{{ article.title }}</h1>
     {{ article.html | safe }}
 </article>
 {% endblock %}

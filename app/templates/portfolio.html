@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Portfolio — {{ site.name }}{% endblock %}
+{% block title %}Portfolio &mdash; {{ site.name }}{% endblock %}
 {% block meta_description %}Model portfolio allocations and combined backtest. The real book is members-only.{% endblock %}
 
 {% block content %}
@@ -7,50 +7,59 @@
     <div>
         <span class="eyebrow"><i class="bi bi-pie-chart"></i> Portfolio</span>
         <h1>Model portfolio</h1>
-        <p class="lead">How the strategies combine into one book — target allocations and the blended
-           backtest, shown in full. The <strong>live account</strong> below, traded against these rules,
-           is visible to members.</p>
+        <p class="lead">
+            How the strategies combine into one book &mdash; target allocations and the blended
+            backtest, shown in full. The <strong>live account</strong> below, traded against these
+            rules, is visible to members.
+        </p>
     </div>
 </div>
 
+{# ── Headline stats ── #}
 {% if model and model.stats %}
-<div class="mb-3">{% with stats = model.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
+<div class="mb-4">{% with stats = model.stats %}{% include "partials/stat_tiles.html" %}{% endwith %}</div>
 {% endif %}
 
-<div class="qt-grid" style="grid-template-columns: 2fr 1fr;">
-    <div class="qt-panel">
-        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Combined backtest</span></div>
-        <div class="qt-panel-body">
-            {% if model and model.chart %}
-                {% with chart_id = 'pf-chart', chart = model.chart, subplots = model.subplots %}
-                    {% include "partials/chart_panel.html" %}
-                {% endwith %}
-            {% else %}
-                <div class="alert alert-info mb-0">Model portfolio snapshot not published yet.</div>
-            {% endif %}
-        </div>
+{# ── Combined backtest + allocations as a spread ── #}
+<section class="qt-panel mb-4">
+    <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Combined backtest</span></div>
+    <div class="qt-panel-body">
+        {% if model and model.chart %}
+            {% with chart_id = 'pf-chart', chart = model.chart, subplots = model.subplots %}
+                {% include "partials/chart_panel.html" %}
+            {% endwith %}
+        {% else %}
+            <div class="alert alert-info mb-0">Model portfolio snapshot not published yet.</div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="spread">
+    <div class="spread-col">
+        <h4><i class="bi bi-sliders"></i> Target allocations</h4>
+        {% if model and model.allocations %}
+            {% for a in model.allocations %}
+            <div class="alloc-row">
+                <span class="alloc-name">{{ a.name }}</span>
+                <span class="alloc-weight">{{ '%.0f' | format(a.weight * 100) }}%</span>
+                <div class="alloc-bar"><span style="width: {{ a.weight * 100 }}%;"></span></div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted"><em>Allocations not published.</em></p>
+        {% endif %}
     </div>
 
-    <div class="qt-panel">
-        <div class="qt-panel-head"><span class="qt-panel-head-title"><i class="bi bi-sliders"></i> Allocations</span></div>
-        <div class="qt-panel-body">
-            {% if model and model.allocations %}
-                {% for a in model.allocations %}
-                <div class="alloc-row">
-                    <span class="alloc-name">{{ a.name }}</span>
-                    <span class="alloc-weight">{{ '%.0f' | format(a.weight * 100) }}%</span>
-                    <div class="alloc-bar"><span style="width: {{ a.weight * 100 }}%;"></span></div>
-                </div>
-                {% endfor %}
-            {% else %}
-                <p class="text-muted mb-0">Allocations not published.</p>
-            {% endif %}
-        </div>
+    <div class="spread-col">
+        <h4><i class="bi bi-info-circle"></i> Notes</h4>
+        <p>The model portfolio is reconstituted on a fixed schedule. Each constituent strategy is
+           independently published with its own methodology and backtest &mdash; the blend you see
+           here is a simple weighted combination, not a black box.</p>
     </div>
-</div>
+</section>
 
 {# ── Real portfolio — gated component (owner/admin entitlement) ── #}
-<div class="qt-panel mt-3">
+<section class="qt-panel mt-4">
     <div class="qt-panel-head">
         <span class="qt-panel-head-title"><i class="bi bi-safe2"></i> Real portfolio</span>
         <span class="badge bg-secondary">members</span>
@@ -64,5 +73,5 @@
             {% include "partials/access_wall.html" %}
         {% endwith %}
     </div>
-</div>
+</section>
 {% endblock %}

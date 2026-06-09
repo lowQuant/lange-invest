@@ -6,7 +6,8 @@ python-multipart>=0.0.6
 itsdangerous>=2.1          # signed session cookies
 pyotp>=2.9                 # TOTP 2FA
 markdown>=3.5             # article rendering
-a2wsgi>=1.10               # ASGI->WSGI adapter (PythonAnywhere web tab)
+a2wsgi>=1.10               # ASGI->WSGI adapter (PythonAnywhere; optional — app/wsgi.py is the default)
+tomli>=2.0; python_version < "3.11"   # stdlib tomllib backport for py3.10 hosts
 
 # Engine (vendored core/ from arcticdb-viewer) + MCP tools
 arcticdb>=6.0

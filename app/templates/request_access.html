@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 {% block shell_class %}narrow{% endblock %}
-{% block title %}Request access — {{ site.name }}{% endblock %}
+{% block title %}Request access &mdash; {{ site.name }}{% endblock %}
 {% block content %}
 <div class="page-head"><div><span class="eyebrow">Access</span><h1>Request access</h1></div></div>
-<div class="qt-panel">
-    <div class="qt-panel-body">
-        <p>Live signals and the real portfolio are available to members. Access is modelled as
-           entitlements, so a paid tier can be added later without changing how the wall works.</p>
-        <p class="mb-0">To request an account, email
-           <a href="mailto:{{ 'access@' ~ site.domain }}">access@{{ site.domain }}</a> with a short note about
-           who you are. Accounts are provisioned with password + TOTP two-factor authentication.</p>
-    </div>
+<div class="prose" style="font-size: 1.0625rem;">
+    <p>Live signals and the real portfolio are available to members. Access is modelled as
+       entitlements, so a paid tier can be added later without changing how the wall works.</p>
+    <p>To request an account, email
+       <a href="mailto:{{ 'access@' ~ site.domain }}">access@{{ site.domain }}</a> with a short note about
+       who you are. Accounts are provisioned with password + TOTP two-factor authentication.</p>
 </div>
 {% endblock %}

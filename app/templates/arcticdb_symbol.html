@@ -19,7 +19,7 @@
         <h1 style="font-family:var(--mono);">{{ symbol }}</h1>
     </div>
     {% if desc %}
-    <div class="d-flex gap-3">
+    <div class="d-flex gap-3 flex-wrap">
         <div class="metric-mini"><span class="v">{{ '{:,}'.format(desc.rows or 0) }}</span><span class="l">rows</span></div>
         <div class="metric-mini"><span class="v">{{ (desc.columns or []) | length }}</span><span class="l">cols</span></div>
         {% if meta and meta.is_multiindex %}<div class="metric-mini"><span class="v text-up">{{ meta.n_contracts }}</span><span class="l">contracts</span></div>{% endif %}

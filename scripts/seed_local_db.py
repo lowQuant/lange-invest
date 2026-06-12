@@ -22,7 +22,11 @@ import pandas as pd
 
 URI = os.getenv("LANGE_DB_URI", "lmdb:///tmp/lange_db")
 
-FUT_ROOTS = {"ES": 5000.0, "NQ": 18000.0, "CL": 75.0, "GC": 2300.0, "ZN": 110.0, "6E": 1.08}
+FUT_ROOTS = {
+    "ES": 5000.0, "NQ": 18000.0, "CL": 75.0, "GC": 2300.0, "ZN": 110.0, "6E": 1.08,
+    # Micro contracts — the production default view; names carry "Micro".
+    "MES": 5000.0, "MNQ": 18000.0, "MCL": 75.0, "MGC": 2300.0, "M6E": 1.08,
+}
 STOCKS = {"AAPL": 180.0, "MSFT": 420.0, "NVDA": 120.0, "AMZN": 185.0, "GOOGL": 165.0, "META": 500.0, "JPM": 200.0}
 
 MONTH_CODE = {3: "H", 6: "M", 9: "U", 12: "Z"}
@@ -119,6 +123,11 @@ def main() -> None:
         "GC": ("Gold", "COMEX", "Metals", "USD", 100, 0.10),
         "ZN": ("10-Year T-Note", "CBOT", "Rates", "USD", 1000, 0.015625),
         "6E": ("Euro FX", "CME", "FX", "USD", 125000, 0.00005),
+        "MES": ("Micro E-mini S&P 500", "CME", "Equity Index", "USD", 5, 0.25),
+        "MNQ": ("Micro E-mini Nasdaq 100", "CME", "Equity Index", "USD", 2, 0.25),
+        "MCL": ("Micro WTI Crude Oil", "NYMEX", "Energy", "USD", 100, 0.01),
+        "MGC": ("Micro Gold", "COMEX", "Metals", "USD", 10, 0.10),
+        "M6E": ("Micro Euro FX", "CME", "FX", "USD", 12500, 0.0001),
     }
     uni.write("Futures", pd.DataFrame(
         [{"symbol": k, "name": n, "exchange": ex, "sector": s, "currency": c,

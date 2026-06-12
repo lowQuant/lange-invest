@@ -31,6 +31,10 @@ public_libraries = [
     # Public Database browser (open to anyone), read-only:
     "futures",
     "market_data",
+    # Equity price data for the /futures overview + simulator (read-only).
+    # Harmless if the library doesn't exist yet — the allowlist is always
+    # intersected with reality before anything is listed or read.
+    "equities",
 ]
 
 # Libraries surfaced in the public "Database" tab (open to anyone, read-only).

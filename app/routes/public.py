@@ -135,11 +135,21 @@ async def futures_overview_page(request: Request):
 @router.get("/futures/api/payload")
 async def futures_overview_payload(subset: str = "micro"):
     """Per-symbol chart data + trend metric, cached. Hydrates the /futures
-    shell. ``subset='micro'`` (default) returns only the micro contracts —
-    much cheaper on cold start; ``subset='all'`` fills in the rest."""
+    shell. ``subset='micro'`` (default) returns the micro contracts plus all
+    equities — much cheaper on cold start; ``subset='all'`` fills in the rest."""
     if subset not in ("micro", "all"):
         subset = "all"
     return JSONResponse(futures_overview.build_chart_payload(subset=subset))
+
+
+@router.get("/futures/api/correlations")
+async def futures_overview_correlations(subset: str = "micro", window: int = 250):
+    """Pairwise daily-return correlation matrix across the subset's markets,
+    cached. Feeds the simulator's diversified-portfolio builder."""
+    if subset not in ("micro", "all"):
+        subset = "all"
+    window = max(60, min(window, 2000))
+    return JSONResponse(futures_overview.build_correlations(subset=subset, window=window))
 
 
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────

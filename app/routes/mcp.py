@@ -33,7 +33,7 @@ from typing import Any, Callable
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import public_access
+from app import futures_overview, public_access
 from app.config import PRIVATE_DIR, get_config
 
 router = APIRouter()
@@ -46,6 +46,10 @@ HTTP_DISABLED_TOOLS = {"delete_library"}
 # Tools that mutate data/structure — guarded against protected libraries.
 DESTRUCTIVE_TOOLS = {"write_data", "update_data", "append_data", "delete_symbol",
                      "create_library", "delete_library"}
+# Libraries that feed the cached /futures overview. A successful write to one
+# of these through this endpoint invalidates the in-process cache so the page
+# serves fresh prices immediately (no restart, no TTL wait).
+OVERVIEW_LIBRARIES = {"futures", "universe", *futures_overview.EQUITY_LIBRARIES}
 
 
 # ── Token scopes ─────────────────────────────────────────────────────────────
@@ -327,6 +331,8 @@ async def mcp_endpoint(request: Request):
         try:
             result = handler(args)
             audit(token_name, scope, name, args, ok=True)
+            if name in DESTRUCTIVE_TOOLS and (target is None or target in OVERVIEW_LIBRARIES):
+                futures_overview.invalidate_cache()
             text = result if isinstance(result, str) else json.dumps(result, default=str)
             return JSONResponse(_rpc_result(rpc_id, {"content": [{"type": "text", "text": text}]}))
         except public_access.AccessDenied as e:

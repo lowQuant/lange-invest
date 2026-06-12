@@ -242,6 +242,12 @@
                     <span class="ac-lbl">Benchmark (reference only — not added to the book)</span>
                     <select id="sim-benchmark" class="form-select form-select-sm"></select>
                 </label>
+                <label class="sim-input">
+                    <span class="ac-lbl">Max corr (stop threshold)</span>
+                    <div class="sim-input-field">
+                        <input type="number" id="sim-maxcorr" value="0.30" min="-1" max="1" step="0.05">
+                    </div>
+                </label>
                 <div class="sim-input sim-builder-actions">
                     <span class="ac-lbl">Build</span>
                     <div class="d-flex gap-2 flex-wrap">
@@ -258,15 +264,15 @@
                 </div>
             </div>
             <div class="sim-formula">
-                Greedy diversification against the benchmark: the first pick is the candidate whose
-                <em>position</em> returns correlate least with the benchmark
-                (<code>side<sub>candidate</sub> × ρ</code> — a downtrending equity market enters short);
-                every later pick is the candidate with the lowest average correlation to the assets
-                already in the book (<code>side<sub>candidate</sub> × side<sub>member</sub> × ρ</code>,
-                daily returns, last 250 sessions). Candidates must fit the risk budget
-                (≥ 1 contract at the account size and risk per position above). Repeat until every
-                candidate matching the risk-factor contribution is included. The benchmark itself is
-                never added.
+                Greedy diversification against the benchmark: each candidate is scored by its
+                <em>worst</em> position correlation against the benchmark AND every asset already in
+                the book (<code>max of side<sub>candidate</sub> × side<sub>member</sub> × ρ</code>,
+                daily returns, last 250 sessions) — the lowest worst-case wins. The benchmark stays in
+                the scoring at every step, so the book cannot drift back into benchmark beta once it
+                grows, but it is never added itself. Using the worst pair instead of the average stops
+                a large book from diluting a +0.9 twin into "+0.02 avg". Candidates must fit the risk
+                budget (≥ 1 contract at the account size and risk per position above); building stops
+                when the best remaining candidate exceeds <em>Max corr</em>.
             </div>
             <ol class="sim-build-log label-mono" id="sim-build-log"></ol>
         </div>
@@ -1159,12 +1165,11 @@
         sel.innerHTML = syms.map(s => `<option value="${s}">${s} — ${rowMeta(s).name}</option>`).join("");
         sel.value = syms.includes(prev) ? prev : def;
     }
-    function logLine(sym, score, known, vsBenchmark) {
+    function logLine(sym, score, known, ref) {
         const logEl = document.getElementById("sim-build-log");
         if (!logEl) return;
         const side = sideOf(sym) === 1 ? "LONG" : "SHORT";
-        const ref = vsBenchmark ? `corr vs ${benchmarkSym()}` : "avg corr to book";
-        const corrTxt = known ? `${ref} ${score >= 0 ? "+" : ""}${score.toFixed(2)}`
+        const corrTxt = known ? `worst corr ${score >= 0 ? "+" : ""}${score.toFixed(2)} vs ${ref}`
                               : "no overlapping history";
         logEl.insertAdjacentHTML("beforeend",
             `<li><strong>${sym}</strong> ${side} — ${rowMeta(sym).name} <span class="corr-val">· ${corrTxt}</span></li>`);
@@ -1176,36 +1181,37 @@
             ? `book: ${selected.size} market${selected.size === 1 ? "" : "s"} · candidates left: ${remaining}`
             : `candidates: ${remaining}`);
     }
-    // One greedy step. Empty book: score each candidate against the benchmark
-    // alone (side × ρ — the benchmark is the long reference, so a short
-    // position in a correlated market scores negative). Non-empty book: the
-    // average side-adjusted correlation to the members. Candidates without
-    // overlapping history score 0.999 so they join last rather than never.
+    function maxCorrLimit() {
+        const v = parseFloat(document.getElementById("sim-maxcorr").value);
+        return isFinite(v) ? v : 1;
+    }
+    // One greedy step: score each candidate by its WORST side-adjusted
+    // correlation against the benchmark (a permanent long reference — the
+    // book must never drift back into benchmark beta) and every member
+    // already in the book; the lowest worst-case wins. Worst-pair beats
+    // averaging, which lets a +0.9 twin hide inside a large book.
+    // Candidates without overlapping history score 0.999 so they join last
+    // rather than never.
     function builderStep(c) {
         const members = Array.from(selected);
         const candidates = eligibleSyms().filter(s => !selected.has(s));
         if (!candidates.length) return null;
-        const bench = benchmarkSym();
+        const refs = [[benchmarkSym(), 1]].concat(members.map(m => [m, sideOf(m)]));
         let best = null;
         for (const cand of candidates) {
             const candSide = sideOf(cand);
-            let sum = 0, n = 0;
-            if (members.length === 0) {
-                const r = c ? corrOf(c, cand, bench) : null;
-                if (r != null) { sum = candSide * r; n = 1; }
-            } else {
-                for (const m of members) {
-                    const r = c ? corrOf(c, cand, m) : null;
-                    if (r == null) continue;
-                    sum += candSide * sideOf(m) * r;
-                    n++;
-                }
+            let worst = null, worstRef = null;
+            for (const [ref, refSide] of refs) {
+                const r = c ? corrOf(c, cand, ref) : null;
+                if (r == null) continue;
+                const v = candSide * refSide * r;
+                if (worst == null || v > worst) { worst = v; worstRef = ref; }
             }
-            const known = n > 0;
-            const score = known ? sum / n : 0.999;
-            if (!best || score < best.score) best = { sym: cand, score, known };
+            const known = worst != null;
+            const score = known ? worst : 0.999;
+            if (!best || score < best.score) best = { sym: cand, score, known, ref: worstRef };
         }
-        return { ...best, vsBenchmark: members.length === 0 };
+        return best;
     }
     const benchEl = document.getElementById("sim-benchmark");
     if (benchEl) benchEl.addEventListener("change", () => { if (builderOpen) updateBuilderState(); });
@@ -1216,6 +1222,10 @@
         populateBenchmark();
         updateBuilderState();
     };
+    function overLimitMsg(best, limit) {
+        return `stopped — best remaining ${best.sym} at ${best.score >= 0 ? "+" : ""}${best.score.toFixed(2)} `
+             + `(vs ${best.ref}) exceeds max corr ${limit.toFixed(2)}`;
+    }
     window.builderAddNext = function () {
         if (!payload) return;
         ensureCorrelations().then(c => {
@@ -1226,8 +1236,13 @@
                     : "no candidate in scope fits the risk budget");
                 return;
             }
+            const limit = maxCorrLimit();
+            if (best.known && best.score > limit) {
+                setBuilderState(overLimitMsg(best, limit));
+                return;
+            }
             setSelected(best.sym, true);
-            logLine(best.sym, best.score, best.known, best.vsBenchmark);
+            logLine(best.sym, best.score, best.known, best.ref);
             renderSim();
             updateBuilderState();
         });
@@ -1235,15 +1250,18 @@
     window.builderBuildAll = function () {
         if (!payload) return;
         ensureCorrelations().then(c => {
-            let guard = 0;
+            const limit = maxCorrLimit();
+            let guard = 0, stopped = null;
             while (guard++ < 500) {
                 const best = builderStep(c);
                 if (!best) break;
+                if (best.known && best.score > limit) { stopped = best; break; }
                 setSelected(best.sym, true);
-                logLine(best.sym, best.score, best.known, best.vsBenchmark);
+                logLine(best.sym, best.score, best.known, best.ref);
             }
             renderSim();
-            updateBuilderState();
+            if (stopped) setBuilderState(overLimitMsg(stopped, limit));
+            else updateBuilderState();
         });
     };
 

@@ -88,13 +88,6 @@
         <button class="fov-chip" data-size="all">All</button>
     </div>
     <span class="fov-sep"></span>
-    <span class="ac-lbl">Type</span>
-    <div class="fov-chip-group" id="fov-type-chips">
-        <button class="fov-chip active" data-type="all">All</button>
-        <button class="fov-chip" data-type="future">Futures</button>
-        <button class="fov-chip" data-type="equity">Equities</button>
-    </div>
-    <span class="fov-sep"></span>
     <span class="ac-lbl">Sector</span>
     <div class="fov-chip-group" id="fov-sector-chips">
         <button class="fov-chip active" data-sector="all">All</button>
@@ -137,10 +130,10 @@
             <tbody id="fov-tbody">
                 {% for r in rows %}
                 <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
-                    data-is-micro="{{ '1' if r.is_micro else '0' }}" data-asset-type="{{ r.asset_type }}"
+                    data-is-micro="{{ '1' if r.is_micro else '0' }}"
                     data-trend-signal="" data-last="" data-trend=""
                     onclick="rowClick('{{ r.symbol }}')">
-                    <td class="fov-sym">{{ r.symbol }}{% if r.asset_type == 'equity' %} <span class="fov-asset-tag">EQ</span>{% endif %}</td>
+                    <td class="fov-sym">{{ r.symbol }}</td>
                     <td>{{ r.name }}</td>
                     <td><span class="fov-chip-pill">{{ r.sector }}</span></td>
                     <td class="num text-end fov-cell-last">&mdash;</td>
@@ -166,12 +159,10 @@
         {% for r in sec.markets %}
         <article class="fov-card" id="card-{{ r.symbol }}"
                  data-symbol="{{ r.symbol }}" data-sector="{{ r.sector }}"
-                 data-is-micro="{{ '1' if r.is_micro else '0' }}" data-asset-type="{{ r.asset_type }}"
-                 data-trend-signal="">
+                 data-is-micro="{{ '1' if r.is_micro else '0' }}" data-trend-signal="">
             <header class="fov-card-head">
                 <div>
                     <span class="fov-card-sym">{{ r.symbol }}</span>
-                    {% if r.asset_type == 'equity' %}<span class="fov-asset-tag">EQ</span>{% endif %}
                     <span class="fov-card-name">{{ r.name }}</span>
                 </div>
                 <span class="fov-card-trend muted">&mdash;</span>
@@ -225,8 +216,7 @@
                 </label>
             </div>
             <div class="sim-formula">
-                Sizing rule: <code>qty = risk × equity / (ATR<sub>100</sub> × point&nbsp;value)</code>.
-                Futures: point value = contract multiplier; equities: point value = 1, so qty = shares.
+                Sizing rule: <code>contracts = risk × equity / (ATR<sub>100</sub> × point&nbsp;value)</code>.
                 In <em>diversified</em> mode the trend signal sets the side (uptrend → long, downtrend → short).
                 <em>Long only</em> / <em>short only</em> force the side for every market in scope —
                 combine with the Up / Down trend chip above for a trend-conditional book.
@@ -234,8 +224,14 @@
         </div>
     </div>
 
-    {# ── Diversified portfolio builder ────────────────────────────────────── #}
-    <div class="qt-panel mb-3">
+    {# ── Diversified portfolio builder (optional, hidden by default) ───────── #}
+    <div class="mb-3">
+        <button class="btn btn-sm btn-outline-secondary sim-builder-toggle" id="sim-builder-toggle"
+                onclick="toggleBuilder()">
+            <i class="bi bi-diagram-3"></i> Diversified portfolio builder
+        </button>
+    </div>
+    <div class="qt-panel mb-3" id="sim-builder-panel" style="display:none;">
         <div class="qt-panel-head">
             <span class="qt-panel-head-title"><i class="bi bi-diagram-3"></i> Diversified portfolio builder</span>
             <span class="label-mono" id="sim-builder-state" style="color:var(--ink-4);"></span>
@@ -243,31 +239,34 @@
         <div class="qt-panel-body sim-form">
             <div class="sim-input-row">
                 <label class="sim-input">
-                    <span class="ac-lbl">Start from (benchmark)</span>
-                    <select id="sim-seed" class="form-select form-select-sm"></select>
+                    <span class="ac-lbl">Benchmark (reference only — not added to the book)</span>
+                    <select id="sim-benchmark" class="form-select form-select-sm"></select>
                 </label>
                 <div class="sim-input sim-builder-actions">
                     <span class="ac-lbl">Build</span>
                     <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-sm btn-outline-secondary" onclick="builderStart()">
-                            <i class="bi bi-arrow-counterclockwise"></i> Start / reset
-                        </button>
                         <button class="btn btn-sm btn-primary" onclick="builderAddNext()">
-                            <i class="bi bi-plus-lg"></i> Add lowest-correlating market
+                            <i class="bi bi-plus-lg"></i> Select next low-correlating market
                         </button>
                         <button class="btn btn-sm btn-outline-primary" onclick="builderBuildAll()">
                             <i class="bi bi-fast-forward"></i> Build full portfolio
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="builderReset()">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset
                         </button>
                     </div>
                 </div>
             </div>
             <div class="sim-formula">
-                Greedy diversification: the book starts from the benchmark (its side follows the trend —
-                short equities when the trend is down). Each step scores every remaining candidate that
-                fits the risk budget (≥ 1 contract/share at the account size and risk per position above)
-                by its average <em>position</em> correlation to the current book
-                (<code>side<sub>candidate</sub> × side<sub>member</sub> × ρ</code>, daily returns, last 250 sessions)
-                and adds the lowest. Repeat until every candidate matching the risk-factor contribution is included.
+                Greedy diversification against the benchmark: the first pick is the candidate whose
+                <em>position</em> returns correlate least with the benchmark
+                (<code>side<sub>candidate</sub> × ρ</code> — a downtrending equity market enters short);
+                every later pick is the candidate with the lowest average correlation to the assets
+                already in the book (<code>side<sub>candidate</sub> × side<sub>member</sub> × ρ</code>,
+                daily returns, last 250 sessions). Candidates must fit the risk budget
+                (≥ 1 contract at the account size and risk per position above). Repeat until every
+                candidate matching the risk-factor contribution is included. The benchmark itself is
+                never added.
             </div>
             <ol class="sim-build-log label-mono" id="sim-build-log"></ol>
         </div>
@@ -293,7 +292,7 @@
                         <th class="text-end">ATR(100)</th>
                         <th class="text-end">Point&nbsp;value</th>
                         <th class="text-end">Last</th>
-                        <th class="text-end">Qty</th>
+                        <th class="text-end">Contracts</th>
                         <th class="text-end">Notional</th>
                         <th class="text-end">Daily&nbsp;$&nbsp;risk</th>
                     </tr>
@@ -451,13 +450,6 @@
         color: var(--ink-2); background: var(--bg-3);
         border: 1px solid var(--line-2); border-radius: 999px;
     }
-    .fov-asset-tag {
-        display: inline-block; padding: 0 .3rem;
-        font-family: var(--mono); font-size: .58rem; font-weight: 500;
-        text-transform: uppercase; letter-spacing: .08em;
-        color: var(--signature); border: 1px solid var(--signature);
-        border-radius: 3px; vertical-align: 1px; opacity: .8;
-    }
     .text-up { color: var(--up); }
     .text-down { color: var(--down); }
     .fov-trend {
@@ -573,9 +565,10 @@
     .sim-side.short { color: var(--down); background: var(--down-dim); }
     .sim-side.skip { color: var(--ink-4); background: var(--bg-3); }
 
-    /* Portfolio builder */
-    .sim-builder-actions .btn { font-family: var(--mono); font-size: .7rem;
+    /* Portfolio builder (optional tool, hidden until toggled) */
+    .sim-builder-toggle, .sim-builder-actions .btn { font-family: var(--mono); font-size: .7rem;
         text-transform: uppercase; letter-spacing: .08em; }
+    .sim-builder-toggle.active { color: var(--paper); background: var(--ink-1); border-color: var(--ink-1); }
     .sim-build-log {
         margin: .85rem 0 0; padding: .75rem 0 0 1.4rem;
         border-top: 1px solid var(--line-1);
@@ -602,14 +595,15 @@
 (function () {
     // ── State ──
     let mode = "curve";                  // curve | term | sim
-    let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, is_micro, asset_type, curve_chart, term_chart}}
+    let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, is_micro, curve_chart, term_chart}}
     let loadedSubset = "micro";          // which subset of the payload we've fetched
     let allFetchInflight = null;         // Promise while expanding "all"
     const charts = new Map();
-    const filters = { size: "micro", type: "all", sector: "all", trend: "all" };
+    const filters = { size: "micro", sector: "all", trend: "all" };
     const selected = new Set();          // user-picked rows for the sim universe
     const corrCache = {};                // correlation matrix per subset
     let corrInflight = null;
+    let builderOpen = false;             // the builder is an opt-in tool
 
     // ── Helpers ──
     function fmt4g(v) {
@@ -721,14 +715,12 @@
     function pruneMissing() {
         // Remove rows/cards the server definitively rejected (unusable curve,
         // sparse-roll micro, etc.). When we've only fetched ``subset='micro'``
-        // we know nothing about non-micro futures yet — leave them in place;
-        // they'll hydrate or be pruned after the 'all' fetch. Equities are
-        // always part of the micro subset, so they're always resolved.
+        // we know nothing about non-micros yet — leave them in place; they'll
+        // hydrate or be pruned after the 'all' fetch.
         if (!payload) return;
         const isResolved = (el) =>
             loadedSubset === "all" ||
-            el.dataset.isMicro === "1" ||
-            el.dataset.assetType === "equity";
+            (loadedSubset === "micro" && el.dataset.isMicro === "1");
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
             if (!payload[tr.dataset.sym] && isResolved(tr)) tr.remove();
         });
@@ -790,16 +782,10 @@
         const sector = el.dataset.sector;
         const sigStr = el.dataset.trendSignal || "";
         const isMicro = el.dataset.isMicro === "1";
-        const assetType = el.dataset.assetType || "future";
-        // Size applies to futures only — equities scale down to one share.
-        if (filters.size === "micro" && assetType === "future" && !isMicro) return false;
-        if (filters.type !== "all" && assetType !== filters.type) return false;
+        if (filters.size === "micro" && !isMicro) return false;
         if (filters.sector !== "all" && sector !== filters.sector) return false;
         if (filters.trend === "up" && sigStr !== "1") return false;
         if (filters.trend === "down" && sigStr !== "-1") return false;
-        // Term-structure mode: equities have no forward curve — hide their
-        // cards (the trend table keeps them).
-        if (mode === "term" && el.classList.contains("fov-card") && assetType === "equity") return false;
         return true;
     }
     function applyFilters() {
@@ -835,14 +821,6 @@
             document.querySelectorAll("#fov-trend-chips .fov-chip").forEach(x => x.classList.remove("active"));
             b.classList.add("active");
             filters.trend = b.dataset.trend;
-            applyFilters();
-        });
-    });
-    document.querySelectorAll("#fov-type-chips .fov-chip").forEach(b => {
-        b.addEventListener("click", () => {
-            document.querySelectorAll("#fov-type-chips .fov-chip").forEach(x => x.classList.remove("active"));
-            b.classList.add("active");
-            filters.type = b.dataset.type;
             applyFilters();
         });
     });
@@ -904,7 +882,7 @@
             t.classList.toggle("active", t.dataset.mode === m));
         document.getElementById("fov-mode-hint").textContent =
             m === "curve" ? "close, back-adj · EMA(50), EMA(100)" :
-            m === "term"  ? "forward curve at the latest date, near→far by DTE (futures only)" :
+            m === "term"  ? "forward curve at the latest date, near→far by DTE" :
                             "size positions by ATR(100) and point value";
         document.getElementById("fov-charts").style.display = (m === "sim") ? "none" : "";
         document.getElementById("fov-sim").style.display = (m === "sim") ? "" : "none";
@@ -912,10 +890,9 @@
             // Switching INTO sim — drop the gallery charts so they don't keep
             // ticking in memory while the user is on this tab.
             destroyAll();
-            populateSeed();
+            populateBenchmark();
         }
-        // Re-apply filters: visibility is mode-dependent (equities have no
-        // term structure) and applyFilters mounts charts / renders the sim.
+        // applyFilters re-applies visibility and mounts charts / renders the sim.
         applyFilters();
     };
 
@@ -980,7 +957,7 @@
         if (mo === "short") return -1;
         return e.trend_signal == null ? 0 : e.trend_signal;
     }
-    // Contracts (futures) / shares (equities) at the current risk budget.
+    // Contracts at the current risk budget.
     function qtyOf(sym, targetDaily) {
         const e = payload && payload[sym]; if (!e) return null;
         if (e.atr100 == null || e.multiplier == null || e.atr100 <= 0 || e.multiplier <= 0) return null;
@@ -1082,10 +1059,10 @@
         mountSimCharts(sized);
     }
     // Live re-render on input change (the builder's candidate pool depends on
-    // the same inputs, so refresh the seed list too)
+    // the same inputs, so keep its status fresh too)
     ["sim-equity", "sim-risk", "sim-mode"].forEach(id => {
         const el = document.getElementById(id);
-        const onChange = () => { renderSim(); populateSeed(); };
+        const onChange = () => { renderSim(); if (builderOpen) updateBuilderState(); };
         if (el) el.addEventListener("input", onChange);
         if (el) el.addEventListener("change", onChange);
     });
@@ -1096,12 +1073,21 @@
         if (isFinite(n) && n > 0) eqEl.value = Math.round(n).toLocaleString("en-US");
     });
 
-    // ── Diversified portfolio builder ──
-    // Greedy low-correlation selection: start from a benchmark (equity index
-    // by default; its side follows the trend, so a downtrend seeds SHORT
-    // equities), then repeatedly add the candidate with the lowest average
-    // side-adjusted correlation to the current book until every market that
-    // fits the risk budget is included.
+    // ── Diversified portfolio builder (optional tool) ──
+    // Greedy low-correlation selection AGAINST a benchmark. The benchmark is
+    // a reference only and never enters the book: the first pick is the
+    // candidate whose position returns correlate least with it (a
+    // downtrending equity market enters short), every later pick is the
+    // candidate with the lowest average side-adjusted correlation to the
+    // assets already in the book. Candidates must fit the risk budget.
+    window.toggleBuilder = function () {
+        builderOpen = !builderOpen;
+        const panel = document.getElementById("sim-builder-panel");
+        const btn = document.getElementById("sim-builder-toggle");
+        if (panel) panel.style.display = builderOpen ? "" : "none";
+        if (btn) btn.classList.toggle("active", builderOpen);
+        if (builderOpen) { populateBenchmark(); updateBuilderState(); }
+    };
     function setBuilderState(text) {
         const el = document.getElementById("sim-builder-state");
         if (el) el.textContent = text || "";
@@ -1130,15 +1116,18 @@
         return c.matrix[i][j];
     }
     // Candidates = markets passing the current filters that take a side and
-    // size to at least 1 contract/share at the current risk budget.
+    // size to at least 1 contract at the current risk budget. The benchmark
+    // itself is never a candidate.
     function eligibleSyms() {
         const { equity, risk } = readSimInputs();
         if (!payload || !isFinite(equity) || equity <= 0 || !isFinite(risk) || risk <= 0) return [];
         const targetDaily = risk * equity;
+        const bench = benchmarkSym();
         return Array.from(document.querySelectorAll("#fov-tbody tr"))
             .filter(tr => !tr.classList.contains("hidden"))
             .map(tr => tr.dataset.sym)
-            .filter(sym => payload[sym] && sideOf(sym) !== 0 && (qtyOf(sym, targetDaily) || 0) >= 1);
+            .filter(sym => sym !== bench && payload[sym] && sideOf(sym) !== 0
+                        && (qtyOf(sym, targetDaily) || 0) >= 1);
     }
     function rowMeta(sym) {
         const tr = document.querySelector(`#fov-tbody tr[data-sym="${sym}"]`);
@@ -1146,34 +1135,37 @@
             name: tr ? tr.dataset.name : sym,
             sector: tr ? (tr.dataset.sector || "") : "",
             isMicro: tr ? tr.dataset.isMicro === "1" : false,
-            assetType: tr ? (tr.dataset.assetType || "future") : "future",
         };
     }
-    function populateSeed() {
-        const sel = document.getElementById("sim-seed");
+    function benchmarkSym() {
+        const sel = document.getElementById("sim-benchmark");
+        return sel ? sel.value : "";
+    }
+    function populateBenchmark() {
+        const sel = document.getElementById("sim-benchmark");
         if (!sel || !payload) return;
         const prev = sel.value;
-        const syms = eligibleSyms();
-        // Default benchmark = the equity-index future (micro first), so the
-        // builder diversifies away from equities; an equity ticker as fallback.
+        // Any market in scope can serve as the reference — it's not sized.
+        const syms = Array.from(document.querySelectorAll("#fov-tbody tr"))
+            .filter(tr => !tr.classList.contains("hidden"))
+            .map(tr => tr.dataset.sym)
+            .filter(sym => payload[sym]);
+        // Default = the equity-index future (micro first): "low correlation
+        // to equities" is the typical diversification target.
         const isEqIdx = s => { const m = rowMeta(s); return /equity/i.test(m.sector) && /index/i.test(m.sector); };
         const def = syms.find(s => isEqIdx(s) && rowMeta(s).isMicro)
                  || syms.find(isEqIdx)
-                 || syms.find(s => rowMeta(s).assetType === "equity")
                  || syms[0] || "";
-        sel.innerHTML = syms.map(s => {
-            const side = sideOf(s) === 1 ? "long" : "short";
-            return `<option value="${s}">${s} — ${rowMeta(s).name} (${side})</option>`;
-        }).join("");
+        sel.innerHTML = syms.map(s => `<option value="${s}">${s} — ${rowMeta(s).name}</option>`).join("");
         sel.value = syms.includes(prev) ? prev : def;
     }
-    function logLine(sym, score, known, isSeed) {
+    function logLine(sym, score, known, vsBenchmark) {
         const logEl = document.getElementById("sim-build-log");
         if (!logEl) return;
         const side = sideOf(sym) === 1 ? "LONG" : "SHORT";
-        const corrTxt = isSeed ? "benchmark seed"
-            : known ? `avg corr to book ${score >= 0 ? "+" : ""}${score.toFixed(2)}`
-                    : "no overlapping history";
+        const ref = vsBenchmark ? `corr vs ${benchmarkSym()}` : "avg corr to book";
+        const corrTxt = known ? `${ref} ${score >= 0 ? "+" : ""}${score.toFixed(2)}`
+                              : "no overlapping history";
         logEl.insertAdjacentHTML("beforeend",
             `<li><strong>${sym}</strong> ${side} — ${rowMeta(sym).name} <span class="corr-val">· ${corrTxt}</span></li>`);
         logEl.classList.add("active");
@@ -1182,75 +1174,76 @@
         const remaining = eligibleSyms().filter(s => !selected.has(s)).length;
         setBuilderState(selected.size > 0
             ? `book: ${selected.size} market${selected.size === 1 ? "" : "s"} · candidates left: ${remaining}`
-            : "");
+            : `candidates: ${remaining}`);
     }
-    // One greedy step: among eligible non-members, pick the lowest average
-    // side-adjusted correlation against the current book. Candidates without
+    // One greedy step. Empty book: score each candidate against the benchmark
+    // alone (side × ρ — the benchmark is the long reference, so a short
+    // position in a correlated market scores negative). Non-empty book: the
+    // average side-adjusted correlation to the members. Candidates without
     // overlapping history score 0.999 so they join last rather than never.
     function builderStep(c) {
         const members = Array.from(selected);
         const candidates = eligibleSyms().filter(s => !selected.has(s));
         if (!candidates.length) return null;
+        const bench = benchmarkSym();
         let best = null;
         for (const cand of candidates) {
             const candSide = sideOf(cand);
             let sum = 0, n = 0;
-            for (const m of members) {
-                const r = c ? corrOf(c, cand, m) : null;
-                if (r == null) continue;
-                sum += candSide * sideOf(m) * r;
-                n++;
+            if (members.length === 0) {
+                const r = c ? corrOf(c, cand, bench) : null;
+                if (r != null) { sum = candSide * r; n = 1; }
+            } else {
+                for (const m of members) {
+                    const r = c ? corrOf(c, cand, m) : null;
+                    if (r == null) continue;
+                    sum += candSide * sideOf(m) * r;
+                    n++;
+                }
             }
             const known = n > 0;
             const score = known ? sum / n : 0.999;
             if (!best || score < best.score) best = { sym: cand, score, known };
         }
-        return best;
+        return { ...best, vsBenchmark: members.length === 0 };
     }
-    function builderSeed() {
+    const benchEl = document.getElementById("sim-benchmark");
+    if (benchEl) benchEl.addEventListener("change", () => { if (builderOpen) updateBuilderState(); });
+    window.builderReset = function () {
         const logEl = document.getElementById("sim-build-log");
         if (logEl) { logEl.innerHTML = ""; logEl.classList.remove("active"); }
         window.clearSelection();
-        populateSeed();
-        const seed = document.getElementById("sim-seed").value;
-        if (!seed) { setBuilderState("no market in scope fits the risk budget"); return false; }
-        setSelected(seed, true);
-        logLine(seed, null, false, true);
-        return true;
-    }
-    window.builderStart = function () {
-        if (!payload) return;
-        if (builderSeed()) { renderSim(); updateBuilderState(); }
+        populateBenchmark();
+        updateBuilderState();
     };
     window.builderAddNext = function () {
         if (!payload) return;
-        if (selected.size === 0 && !builderSeed()) return;
         ensureCorrelations().then(c => {
             const best = builderStep(c);
             if (!best) {
-                renderSim();
-                setBuilderState("done — every candidate matching the risk budget is included");
+                setBuilderState(selected.size > 0
+                    ? "done — every candidate matching the risk budget is included"
+                    : "no candidate in scope fits the risk budget");
                 return;
             }
             setSelected(best.sym, true);
-            logLine(best.sym, best.score, best.known, false);
+            logLine(best.sym, best.score, best.known, best.vsBenchmark);
             renderSim();
             updateBuilderState();
         });
     };
     window.builderBuildAll = function () {
         if (!payload) return;
-        if (selected.size === 0 && !builderSeed()) return;
         ensureCorrelations().then(c => {
             let guard = 0;
             while (guard++ < 500) {
                 const best = builderStep(c);
                 if (!best) break;
                 setSelected(best.sym, true);
-                logLine(best.sym, best.score, best.known, false);
+                logLine(best.sym, best.score, best.known, best.vsBenchmark);
             }
             renderSim();
-            setBuilderState(`done — book: ${selected.size} markets, no candidates left`);
+            updateBuilderState();
         });
     };
 
@@ -1275,7 +1268,7 @@
                 setLoadState(null);
                 hydrate();
                 applyFilters();
-                if (mode === "sim") populateSeed();
+                if (mode === "sim") populateBenchmark();
                 if (window.Chart && window.LangeChart) {
                     if (mode !== "sim") mountCharts(mode);
                 } else {
@@ -1299,7 +1292,7 @@
                 setLoadState(null);
                 hydrate();
                 applyFilters();
-                if (mode === "sim") populateSeed();
+                if (mode === "sim") populateBenchmark();
                 else mountCharts(mode);
             })
             .catch(err => setLoadState("· could not expand to all markets: " + err.message, "error"))

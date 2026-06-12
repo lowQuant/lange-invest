@@ -49,7 +49,7 @@ DESTRUCTIVE_TOOLS = {"write_data", "update_data", "append_data", "delete_symbol"
 # Libraries that feed the cached /futures overview. A successful write to one
 # of these through this endpoint invalidates the in-process cache so the page
 # serves fresh prices immediately (no restart, no TTL wait).
-OVERVIEW_LIBRARIES = {"futures", "universe", *futures_overview.EQUITY_LIBRARIES}
+OVERVIEW_LIBRARIES = {"futures", "universe"}
 
 
 # ── Token scopes ─────────────────────────────────────────────────────────────

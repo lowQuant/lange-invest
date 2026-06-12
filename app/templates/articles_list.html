@@ -32,7 +32,7 @@
             {% if a.summary %}<span class="ar-sum">{{ a.summary }}</span>{% endif %}
         </div>
         {% if user and user.is_admin %}
-        <div style="position:absolute; top:.9rem; right:.25rem;" class="d-flex gap-1">
+        <div style="position:absolute; top:.9rem; right:.25rem;" class="ar-actions d-flex gap-1">
             <a href="/articles/{{ a.slug }}/edit" class="btn btn-sm btn-outline-secondary" title="Edit"><i class="bi bi-pencil"></i></a>
             <button class="btn btn-sm btn-outline-danger" title="Delete"
                     hx-delete="/articles/{{ a.slug }}" hx-confirm="Delete '{{ a.title }}'?"

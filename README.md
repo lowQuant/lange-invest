@@ -103,6 +103,25 @@ curl -s https://lange-invest.com/mcp \
   `MCP_ALLOW_PROTECTED_OVERRIDE=1`. Constant-time token compare, per-token rate
   limit, TLS-only, every call audited to `data/private/mcp_audit.log`.
 
+### Connect Claude Code (project MCP)
+
+The repo ships a project-scoped [`.mcp.json`](.mcp.json) that points Claude
+Code at the MCP endpoint with the **admin** scope (full CRUD on the database).
+It expands environment variables, so no secret is committed — export the
+secret part of one of your `MCP_ADMIN_TOKENS` pairs before starting Claude
+Code in this repo:
+
+```bash
+export LANGE_MCP_ADMIN_TOKEN=SECRET   # the part after "name:" in MCP_ADMIN_TOKENS
+claude                                # approve the "lange-invest-db" server when prompted
+```
+
+To target a local dev server instead of production:
+
+```bash
+export LANGE_MCP_URL=http://localhost:8000/mcp   # server needs MCP_ALLOW_INSECURE=1
+```
+
 ## Deployment (PythonAnywhere)
 
 One web app, one domain. Point the WSGI/ASGI server at `app.main:app`. The public

@@ -2,7 +2,7 @@
    Expects: chart_id, chart (main spec dict), subplots (list, optional). #}
 <div class="chart-container">
     <div id="{{ chart_id }}-panels">
-        <div style="position:relative; height:380px;">
+        <div class="chart-stage">
             <canvas id="{{ chart_id }}"></canvas>
         </div>
     </div>
@@ -30,7 +30,7 @@
 
     subs.forEach((sp, i) => {
         const div = document.createElement("div");
-        div.style.cssText = "position:relative;height:160px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line-1);";
+        div.className = "chart-stage-sub";
         const cv = document.createElement("canvas");
         cv.id = "{{ chart_id }}-sub-" + i;
         div.appendChild(cv);

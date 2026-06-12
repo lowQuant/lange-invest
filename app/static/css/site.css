@@ -20,6 +20,7 @@
     --measure-wide: 84ch;
     --rule: 1px;
     --rule-strong: 2px;
+    --shell-pad-x: 1.5rem;   /* horizontal page gutter — narrows on phones */
 }
 
 /* ─────────────── Light (primary canvas) ─────────────── */
@@ -251,7 +252,7 @@ code, .mono, .tabular, .num {
 .masthead-inner {
     max-width: 1180px;
     margin: 0 auto;
-    padding: 0 1.5rem;
+    padding: 0 var(--shell-pad-x);
 }
 
 /* Top row: wordmark on the left, controls on the right. */
@@ -375,7 +376,7 @@ code, .mono, .tabular, .num {
     max-width: 1180px;
     width: 100%;
     margin: 0 auto;
-    padding: 2.25rem 1.5rem 3rem;
+    padding: 2.25rem var(--shell-pad-x) 3rem;
 }
 .qt-shell.narrow { max-width: 720px; }
 .qt-shell.reading { max-width: 820px; }
@@ -500,7 +501,9 @@ code, .mono, .tabular, .num {
         max-width: 12ch;
     }
     .hero-copy {
-        margin: 0 -1.5rem;
+        /* Full-bleed against the shell gutter — must track --shell-pad-x or it
+           overflows the viewport on phones. */
+        margin: 0 calc(-1 * var(--shell-pad-x));
     }
     .hero .lead {
         max-width: 46ch;
@@ -512,7 +515,8 @@ code, .mono, .tabular, .num {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
     padding-bottom: 0.4rem;
     border-bottom: 1px solid var(--ink-1);
     margin: 3rem 0 1.4rem;
@@ -1294,7 +1298,7 @@ td.col-num, th.col-num { text-align: right; }
 .qt-footer {
     border-top: 1px solid var(--rule-2);
     margin-top: 3rem;
-    padding: 1.6rem 1.5rem 2.2rem;
+    padding: 1.6rem var(--shell-pad-x) 2.2rem;
     background: var(--paper);
     position: relative;
 }
@@ -1469,13 +1473,71 @@ hr { border: 0; border-top: 1px solid var(--rule-2); opacity: 1; margin: 1.5rem 
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   Mobile masthead — collapse to a stack
+   Small screens — phone layout
    ════════════════════════════════════════════════════════════════════════════ */
+
+/* Chart stage (chart_panel partial) — heights live here so they can respond. */
+.chart-stage { position: relative; height: 380px; }
+.chart-stage-sub {
+    position: relative;
+    height: 160px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line-1);
+}
+
+/* Wide-table guard. Desktop keeps page-level scrolling (and sticky headers);
+   below 900px the wrapper scrolls on its own axis so the page never does. */
+@media (max-width: 900px) {
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .table-scroll th, .table-scroll td { white-space: nowrap; }
+}
+
 @media (max-width: 720px) {
-    .masthead-inner { padding: 0 1rem; }
+    :root { --shell-pad-x: 1rem; }
+
     .masthead-row { padding-bottom: 0.75rem; }
     .masthead-name { font-size: 1.5rem; }
-    .masthead-nav-link { padding: 0.65rem 0.9rem; }
-    .qt-shell { padding: 1.5rem 1rem 2rem; }
+    .qt-shell { padding-top: 1.5rem; padding-bottom: 2rem; }
     .page-head { grid-template-columns: 1fr; }
+
+    /* Section nav: a swipeable strip instead of wrapping to ragged rows. */
+    .masthead-nav {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .masthead-nav::-webkit-scrollbar { display: none; }
+    .masthead-nav-link {
+        padding: 0.7rem 0.85rem;
+        white-space: nowrap;
+        flex: 0 0 auto;
+    }
+
+    /* Footer colophon collapses to a stack. */
+    .qt-footer-inner { grid-template-columns: 1fr; align-items: start; }
+
+    /* 2-up numeral strips shouldn't keep a dangling right rule. */
+    .numerals .numeral:nth-child(even),
+    .stat-grid .stat-tile:nth-child(even) { border-right: 0; }
+
+    /* Long-form content scrolls inside the reading column, never the page. */
+    .prose table { display: block; overflow-x: auto; }
+    .prose iframe, .prose embed, .prose object, .prose video { max-width: 100%; }
+
+    /* Charts give the viewport back some height. */
+    .chart-stage { height: 280px; }
+    .chart-stage-sub { height: 120px; }
+
+    /* Admin row actions (articles list) flow with the row instead of
+       overlapping the title once the row is single-column. */
+    .ar-actions { position: static !important; margin-top: 0.4rem; }
+}
+
+@media (max-width: 480px) {
+    .hero h1 { font-size: 2.6rem; }
+    .hero-actions .btn { flex: 1 1 100%; text-align: center; }
+    .entry-title { font-size: 1.4rem; }
+    .ar-title { font-size: 1.3rem; }
 }

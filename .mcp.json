@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "lange-invest-db": {
+      "type": "http",
+      "url": "${LANGE_MCP_URL:-https://lange-invest.com/mcp}",
+      "headers": {
+        "Authorization": "Bearer ${LANGE_MCP_ADMIN_TOKEN}"
+      }
+    }
+  }
+}

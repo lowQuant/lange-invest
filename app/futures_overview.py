@@ -38,6 +38,8 @@ _META_CACHE: dict[str, Any] = {}
 _CHART_CACHE: dict[str, dict[str, Any] | None] = {}
 # Correlation matrices keyed by (subset, window).
 _CORR_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
+# universe/Futures metadata, cached so batch payload calls don't re-read it.
+_UNI_CACHE: dict[str, Any] = {}
 
 # TTL so direct-to-ArcticDB writes (scripts, other processes) surface without a
 # web-process restart. Writes through this app's /mcp endpoint invalidate
@@ -64,6 +66,7 @@ def invalidate_cache() -> None:
     _META_CACHE.clear()
     _CHART_CACHE.clear()
     _CORR_CACHE.clear()
+    _UNI_CACHE.clear()
     _cache_filled_at = None
 
 
@@ -91,7 +94,20 @@ def _first(d: dict, keys: tuple[str, ...]) -> Any:
 # ── universe/Futures metadata ────────────────────────────────────────────────
 
 def _read_universe_futures() -> dict[str, dict[str, Any]]:
-    """Return ``{SYMBOL: {name, sector, exchange, currency, multiplier, …}}``."""
+    """Return ``{SYMBOL: {name, sector, exchange, currency, multiplier, …}}``.
+
+    Cached for the life of the TTL so a burst of batch payload calls doesn't
+    re-read universe/Futures on every request.
+    """
+    if "data" in _UNI_CACHE:
+        return _UNI_CACHE["data"]
+    out = _load_universe_futures()
+    _UNI_CACHE["data"] = out
+    _mark_filled()
+    return out
+
+
+def _load_universe_futures() -> dict[str, dict[str, Any]]:
     try:
         usyms = public_access.list_symbols("universe")
     except Exception:  # noqa: BLE001
@@ -387,21 +403,32 @@ def _subset_symbols(subset: str, uni: dict[str, dict[str, Any]]) -> list[str]:
     return symbols
 
 
-def build_chart_payload(subset: str = "all") -> dict[str, Any]:
+def build_chart_payload(subset: str = "all", symbols: list[str] | None = None) -> dict[str, Any]:
     """Per-symbol chart payloads + trend + ATR.
 
-    ``subset='micro'`` computes only the markets whose universe ``name``
-    contains "micro" — much cheaper on cold start, used as the default page
-    load. ``subset='all'`` fills in the rest. Per-symbol cache means asking
-    for ``'all'`` after ``'micro'`` only does the incremental work.
+    ``symbols`` (an explicit list) takes precedence and computes just those —
+    this is the batch/progressive-load path: the client asks for a handful of
+    markets at a time so the first paint is fast and the rest stream in.
+    Otherwise ``subset='micro'`` computes only the markets whose universe
+    ``name`` contains "micro" and ``subset='all'`` the whole library. The
+    per-symbol cache means repeated/overlapping requests only do new work once.
     """
     _expire_stale()
     if not ensure_connected():
         return {}
 
     uni = _read_universe_futures()
+    if symbols is not None:
+        try:
+            available = set(public_access.list_symbols("futures"))
+        except Exception:  # noqa: BLE001
+            available = set()
+        target = [s for s in symbols if s in available]
+    else:
+        target = _subset_symbols(subset, uni)
+
     out: dict[str, Any] = {}
-    for s in _subset_symbols(subset, uni):
+    for s in target:
         entry = _payload_entry_for(s, uni)
         if entry is not None:
             out[s] = entry

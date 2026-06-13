@@ -109,12 +109,28 @@
 </div>
 
 {# ── Trend summary table (hydrated by JS; filtered by the chips) ──────────── #}
-<div class="qt-panel mb-4">
-    <div class="qt-panel-head">
-        <span class="qt-panel-head-title"><i class="bi bi-table"></i> Trend dashboard</span>
+<div class="qt-panel mb-4 fov-trend-panel" id="fov-trend-panel">
+    <div class="qt-panel-head fov-trend-head" onclick="toggleTrendTable()">
+        <span class="qt-panel-head-title">
+            <button class="fov-collapse-btn" id="fov-trend-collapse" aria-label="Collapse trend table">
+                <i class="bi bi-chevron-down"></i>
+            </button>
+            <i class="bi bi-table"></i> Trend dashboard
+            <span class="label-mono fov-trend-count" id="fov-trend-count"></span>
+        </span>
         <span class="label-mono" style="color:var(--ink-4);">EMA(50) vs EMA(100) &middot; click a row to jump to the chart</span>
     </div>
-    <div class="qt-panel-body dense" style="padding:0;">
+    <div class="qt-panel-body dense fov-trend-body" style="padding:0;">
+        {# Loading state — a determinate progress bar so a cold first visit
+           reads as "working", not "broken". Removed once every market has
+           resolved. #}
+        <div class="fov-table-loading" id="fov-table-loading">
+            <div class="fov-table-loading-row">
+                <div class="spinner-border spinner-border-sm"></div>
+                <span class="label-mono" id="fov-table-loading-text">Loading markets&hellip;</span>
+            </div>
+            <div class="fov-progress"><div class="fov-progress-bar" id="fov-progress-bar"></div></div>
+        </div>
         <div class="table-scroll">
         <table class="table table-sm mb-0 fov-table">
             <thead>
@@ -129,7 +145,7 @@
             </thead>
             <tbody id="fov-tbody">
                 {% for r in rows %}
-                <tr data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
+                <tr class="pending" data-sym="{{ r.symbol }}" data-name="{{ r.name }}" data-sector="{{ r.sector }}"
                     data-is-micro="{{ '1' if r.is_micro else '0' }}"
                     data-trend-signal="" data-last="" data-trend=""
                     onclick="rowClick('{{ r.symbol }}')">
@@ -224,6 +240,41 @@
         </div>
     </div>
 
+    {# ── Universe: which markets feed the sizing table ────────────────────── #}
+    <div class="qt-panel mb-3" id="sim-universe-panel">
+        <div class="qt-panel-body sim-universe-bar">
+            <div class="sim-universe-summary">
+                <span class="ac-lbl">Universe</span>
+                <span class="label-mono" id="sim-universe-text">all markets in scope</span>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button class="btn btn-sm btn-outline-secondary sim-pick-btn" id="sim-pick-btn" onclick="togglePicker(event)">
+                    <i class="bi bi-ui-checks"></i> Select markets manually
+                </button>
+                <button class="btn btn-sm btn-link sim-pick-clear" id="sim-pick-clear"
+                        onclick="clearSelection();return false;" style="display:none;">clear selection</button>
+            </div>
+        </div>
+        {# Collapsible scrollable picker — multi-select, confirmed by clicking the
+           button again or anywhere outside the panel. #}
+        <div class="sim-picker" id="sim-picker" style="display:none;">
+            <div class="sim-picker-tools">
+                <input type="text" id="sim-picker-search" class="form-control form-control-sm"
+                       placeholder="Filter symbols…" autocomplete="off">
+                <span class="label-mono sim-picker-actions">
+                    <a href="#" onclick="pickerSelectVisible(true);return false;">select all</a> ·
+                    <a href="#" onclick="pickerSelectVisible(false);return false;">none</a> ·
+                    <a href="#" onclick="closePicker();return false;">done</a>
+                </span>
+            </div>
+            <div class="sim-picker-scroll">
+                <table class="table table-sm mb-0 fov-table sim-picker-table">
+                    <tbody id="sim-picker-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     {# ── Diversified portfolio builder (optional, hidden by default) ───────── #}
     <div class="mb-3">
         <button class="btn btn-sm btn-outline-secondary sim-builder-toggle" id="sim-builder-toggle"
@@ -237,31 +288,28 @@
             <span class="label-mono" id="sim-builder-state" style="color:var(--ink-4);"></span>
         </div>
         <div class="qt-panel-body sim-form">
-            <div class="sim-input-row">
+            <div class="sim-builder-grid">
                 <label class="sim-input">
-                    <span class="ac-lbl">Benchmark (reference only — not added to the book)</span>
+                    <span class="ac-lbl">Benchmark <span class="ac-lbl-note">reference only</span></span>
                     <select id="sim-benchmark" class="form-select form-select-sm"></select>
                 </label>
                 <label class="sim-input">
-                    <span class="ac-lbl">Max corr (stop threshold)</span>
+                    <span class="ac-lbl">Max corr <span class="ac-lbl-note">stop at</span></span>
                     <div class="sim-input-field">
                         <input type="number" id="sim-maxcorr" value="0.30" min="-1" max="1" step="0.05">
                     </div>
                 </label>
-                <div class="sim-input sim-builder-actions">
-                    <span class="ac-lbl">Build</span>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button class="btn btn-sm btn-primary" onclick="builderAddNext()">
-                            <i class="bi bi-plus-lg"></i> Select next low-correlating market
-                        </button>
-                        <button class="btn btn-sm btn-outline-primary" onclick="builderBuildAll()">
-                            <i class="bi bi-fast-forward"></i> Build full portfolio
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="builderReset()">
-                            <i class="bi bi-arrow-counterclockwise"></i> Reset
-                        </button>
-                    </div>
-                </div>
+            </div>
+            <div class="sim-builder-actions">
+                <button class="btn btn-sm btn-primary" onclick="builderAddNext()">
+                    <i class="bi bi-plus-lg"></i> Select next low-correlating market
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="builderBuildAll()">
+                    <i class="bi bi-fast-forward"></i> Build full portfolio
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="builderReset()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
             </div>
             <div class="sim-formula">
                 Greedy diversification against the benchmark: each candidate is scored by its
@@ -571,10 +619,44 @@
     .sim-side.short { color: var(--down); background: var(--down-dim); }
     .sim-side.skip { color: var(--ink-4); background: var(--bg-3); }
 
+    /* Trend table: collapse control + progressive loading */
+    .fov-trend-head { cursor: pointer; user-select: none; }
+    .fov-collapse-btn {
+        background: transparent; border: 0; padding: 0 .4rem 0 0;
+        color: var(--ink-3); cursor: pointer; line-height: 1;
+    }
+    .fov-collapse-btn .bi { transition: transform .18s; font-size: .8rem; }
+    .fov-trend-panel.collapsed .fov-collapse-btn .bi { transform: rotate(-90deg); }
+    .fov-trend-panel.collapsed .fov-trend-body { display: none; }
+    .fov-trend-count { color: var(--ink-4); margin-left: .5rem; }
+    .fov-table-loading { padding: 1rem 1rem .85rem; }
+    .fov-table-loading.done { display: none; }
+    .fov-table-loading-row { display: flex; align-items: center; gap: .6rem; margin-bottom: .6rem; }
+    .fov-table-loading-row .label-mono { color: var(--ink-3); }
+    .fov-progress {
+        height: 4px; border-radius: 999px; overflow: hidden;
+        background: var(--bg-3);
+    }
+    .fov-progress-bar {
+        height: 100%; width: 0%; border-radius: 999px;
+        background: var(--signature); transition: width .25s ease;
+    }
+    /* Rows not yet resolved stay out of the table — no half-empty grid. */
+    .fov-table tbody tr.pending { display: none; }
+
     /* Portfolio builder (optional tool, hidden until toggled) */
     .sim-builder-toggle, .sim-builder-actions .btn { font-family: var(--mono); font-size: .7rem;
         text-transform: uppercase; letter-spacing: .08em; }
     .sim-builder-toggle.active { color: var(--paper); background: var(--ink-1); border-color: var(--ink-1); }
+    /* Two aligned inputs on one row, buttons on their own row below — fixes the
+       cramped/misaligned 3-column layout where the wrapping benchmark label
+       knocked the controls out of baseline. */
+    .sim-builder-grid {
+        display: grid; gap: 1rem; align-items: end;
+        grid-template-columns: minmax(220px, 2fr) minmax(120px, 1fr);
+    }
+    .sim-builder-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
+    .ac-lbl-note { text-transform: none; letter-spacing: 0; color: var(--ink-4); font-style: italic; }
     .sim-build-log {
         margin: .85rem 0 0; padding: .75rem 0 0 1.4rem;
         border-top: 1px solid var(--line-1);
@@ -584,6 +666,36 @@
     .sim-build-log.active { display: block; }
     .sim-build-log li { margin-bottom: .25rem; }
     .sim-build-log .corr-val { color: var(--ink-3); }
+
+    /* Sim universe bar + manual market picker */
+    .sim-universe-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap; padding: .7rem 1rem;
+    }
+    .sim-universe-summary { display: flex; align-items: center; gap: .6rem; }
+    .sim-universe-summary .label-mono { color: var(--ink-2); }
+    .sim-pick-btn, .sim-pick-clear { font-family: var(--mono); font-size: .7rem;
+        text-transform: uppercase; letter-spacing: .08em; }
+    .sim-pick-btn.active { color: var(--paper); background: var(--ink-1); border-color: var(--ink-1); }
+    .sim-pick-clear { color: var(--signature); text-decoration: none; }
+    .sim-picker { border-top: 1px solid var(--line-2); }
+    .sim-picker-tools {
+        display: flex; align-items: center; gap: 1rem; justify-content: space-between;
+        padding: .6rem 1rem; flex-wrap: wrap;
+    }
+    .sim-picker-tools input { max-width: 240px; font-family: var(--mono); font-size: .8rem; }
+    .sim-picker-actions { color: var(--ink-4); }
+    .sim-picker-actions a { color: var(--signature); text-decoration: none; }
+    .sim-picker-scroll { max-height: 320px; overflow-y: auto; }
+    .sim-picker-table tbody td { padding: .4rem .75rem; cursor: pointer; }
+    .sim-picker-table tbody tr.picked { background: var(--signature-dim); box-shadow: inset 3px 0 0 0 var(--signature); }
+    .sim-picker-check { color: var(--ink-4); }
+    .sim-picker-table tbody tr.picked .sim-picker-check { color: var(--signature); }
+    .sim-picker-side { font-family: var(--mono); font-size: .62rem; text-transform: uppercase;
+        letter-spacing: .08em; padding: .05rem .35rem; border-radius: 3px; }
+    .sim-picker-side.long { color: var(--up); background: var(--up-dim); }
+    .sim-picker-side.short { color: var(--down); background: var(--down-dim); }
+    .sim-picker-side.flat { color: var(--ink-4); background: var(--bg-3); }
 
 
     /* Phone layout */
@@ -602,14 +714,21 @@
     // ── State ──
     let mode = "curve";                  // curve | term | sim
     let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, is_micro, curve_chart, term_chart}}
-    let loadedSubset = "micro";          // which subset of the payload we've fetched
-    let allFetchInflight = null;         // Promise while expanding "all"
     const charts = new Map();
     const filters = { size: "micro", sector: "all", trend: "all" };
     const selected = new Set();          // user-picked rows for the sim universe
     const corrCache = {};                // correlation matrix per subset
     let corrInflight = null;
     let builderOpen = false;             // the builder is an opt-in tool
+    let pickerOpen = false;              // manual market picker (sim tab)
+
+    // Progressive load: resolve a small first batch, stream the rest in the
+    // background so a cold first visit paints fast instead of staring at an
+    // empty table.
+    const resolved = new Set();          // symbols the server has answered for
+    let microSyms = [], restSyms = [];   // split from the server-rendered rows
+    const FIRST_BATCH = 6, BATCH = 6;
+    let bgLoading = false;
 
     // ── Helpers ──
     function fmt4g(v) {
@@ -720,27 +839,28 @@
     }
     function pruneMissing() {
         // Remove rows/cards the server definitively rejected (unusable curve,
-        // sparse-roll micro, etc.). When we've only fetched ``subset='micro'``
-        // we know nothing about non-micros yet — leave them in place; they'll
-        // hydrate or be pruned after the 'all' fetch.
+        // sparse-roll micro, etc.). A symbol is only pruned once it's been
+        // *resolved* (its batch came back) and is still absent — never before,
+        // or we'd drop markets that just haven't loaded yet.
         if (!payload) return;
-        const isResolved = (el) =>
-            loadedSubset === "all" ||
-            (loadedSubset === "micro" && el.dataset.isMicro === "1");
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
-            if (!payload[tr.dataset.sym] && isResolved(tr)) tr.remove();
+            if (resolved.has(tr.dataset.sym) && !payload[tr.dataset.sym]) tr.remove();
         });
         document.querySelectorAll(".fov-card").forEach(card => {
-            if (!payload[card.dataset.symbol] && isResolved(card)) card.remove();
+            if (resolved.has(card.dataset.symbol) && !payload[card.dataset.symbol]) card.remove();
         });
         document.querySelectorAll(".fov-sector").forEach(sec => {
             if (!sec.querySelector(".fov-card")) sec.remove();
         });
-        const rows = document.querySelectorAll("#fov-tbody tr").length;
+        // Counts reflect markets actually shown (resolved + present), not the
+        // pending placeholders still hidden in the DOM.
+        const rows = document.querySelectorAll("#fov-tbody tr:not(.pending)").length;
         const secs = document.querySelectorAll(".fov-sector").length;
         const minis = document.querySelectorAll(".page-head .metric-mini .v");
         if (minis[0]) minis[0].textContent = String(rows);
         if (minis[1]) minis[1].textContent = String(secs);
+        const tc = document.getElementById("fov-trend-count");
+        if (tc) tc.textContent = rows ? `${rows} markets` : "";
     }
 
     function hydrate() {
@@ -749,6 +869,7 @@
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
             const sym = tr.dataset.sym;
             const entry = payload[sym]; if (!entry) return;
+            tr.classList.remove("pending");   // resolved + present → show the row
             const sig = entry.trend_signal == null ? 0 : entry.trend_signal;
             tr.dataset.trendSignal = String(sig);
             if (entry.last != null) {
@@ -794,16 +915,17 @@
         if (filters.trend === "down" && sigStr !== "-1") return false;
         return true;
     }
-    function applyFilters() {
-        // table rows
+    // Visibility only (cheap): toggle hidden classes + sector counts. Split
+    // from chart mounting so a background batch can reveal new rows without
+    // tearing down and rebuilding every chart (which would be O(n²) over the
+    // full library).
+    function applyVisibility() {
         document.querySelectorAll("#fov-tbody tr").forEach(tr => {
             tr.classList.toggle("hidden", !passes(tr));
         });
-        // cards
         document.querySelectorAll(".fov-card").forEach(card => {
             card.classList.toggle("hidden", !passes(card));
         });
-        // sectors: hide empty
         document.querySelectorAll(".fov-sector").forEach(sec => {
             const cards = sec.querySelectorAll(".fov-card");
             const visible = Array.from(cards).filter(c => !c.classList.contains("hidden"));
@@ -811,8 +933,28 @@
             const cn = sec.querySelector(".fov-sec-count");
             if (cn) cn.textContent = visible.length + " market" + (visible.length === 1 ? "" : "s");
         });
+    }
+    // Mount charts for visible cards that don't have one yet (incremental —
+    // used as batches arrive). Existing charts are left in place.
+    function mountVisibleCharts(which) {
+        if (!payload || !window.Chart || !window.LangeChart) return;
+        document.querySelectorAll(".fov-card").forEach(card => {
+            if (card.classList.contains("hidden")) return;
+            const canvas = card.querySelector("canvas");
+            if (!canvas || charts.has(canvas.id)) return;
+            const entry = payload[card.dataset.symbol]; if (!entry) return;
+            const data = which === "term" ? entry.term_chart : entry.curve_chart;
+            if (!data) return;
+            const skel = card.querySelector(".fov-skeleton"); if (skel) skel.style.display = "none";
+            canvas.style.display = "";
+            const ch = LangeChart.render(canvas.id, data, { isMain: true });
+            if (ch) charts.set(canvas.id, ch);
+        });
+    }
+    function applyFilters() {
+        applyVisibility();
         if (mode === "curve" || mode === "term") mountCharts(mode);
-        if (mode === "sim") renderSim();
+        if (mode === "sim") { renderSim(); renderPicker(); updateUniverseText(); }
     }
     document.querySelectorAll("#fov-sector-chips .fov-chip").forEach(b => {
         b.addEventListener("click", () => {
@@ -831,16 +973,16 @@
         });
     });
     document.querySelectorAll("#fov-size-chips .fov-chip").forEach(b => {
-        b.addEventListener("click", async () => {
+        b.addEventListener("click", () => {
             document.querySelectorAll("#fov-size-chips .fov-chip").forEach(x => x.classList.remove("active"));
             b.classList.add("active");
             filters.size = b.dataset.size;
-            // First time the user opens up to "all" we need to fetch the rest
-            // of the universe — micros are already in the payload.
-            if (filters.size === "all" && loadedSubset === "micro") {
-                await loadFullPayload();
-            }
+            // The non-micro markets stream in the background; if the user jumps
+            // to "All" before that started, kick it now. Already-loaded rows
+            // appear immediately; the rest fill in as their batches land.
+            if (filters.size === "all") ensureRestLoading();
             applyFilters();
+            if (mode === "curve" || mode === "term") mountVisibleCharts(mode);
         });
     });
 
@@ -864,13 +1006,14 @@
     }
     function toggleSelected(sym) {
         setSelected(sym, !selected.has(sym));
-        if (mode === "sim") renderSim();
+        if (mode === "sim") { renderSim(); renderPicker(); updateUniverseText(); if (builderOpen) updateBuilderState(); }
     }
     window.clearSelection = function () {
         selected.clear();
         document.querySelectorAll(".fov-selected").forEach(el => el.classList.remove("fov-selected"));
         updateSelectionUI();
-        if (mode === "sim") renderSim();
+        if (mode === "sim") { renderSim(); renderPicker(); updateUniverseText(); if (builderOpen) updateBuilderState(); }
+        return false;
     };
     window.rowClick = function (sym) {
         // In sim mode a click picks the row for the universe. In chart modes
@@ -892,14 +1035,27 @@
                             "size positions by ATR(100) and point value";
         document.getElementById("fov-charts").style.display = (m === "sim") ? "none" : "";
         document.getElementById("fov-sim").style.display = (m === "sim") ? "" : "none";
+        // The long trend dashboard is hidden in the simulator so the position
+        // sizing controls sit at the top — otherwise switching tabs looks like
+        // nothing changed until you scroll past the table.
+        const trendPanel = document.getElementById("fov-trend-panel");
+        if (trendPanel) trendPanel.style.display = (m === "sim") ? "none" : "";
         if (m === "sim") {
             // Switching INTO sim — drop the gallery charts so they don't keep
             // ticking in memory while the user is on this tab.
             destroyAll();
             populateBenchmark();
+        } else {
+            closePicker();
         }
         // applyFilters re-applies visibility and mounts charts / renders the sim.
         applyFilters();
+    };
+
+    // ── Trend table collapse ──
+    window.toggleTrendTable = function () {
+        const panel = document.getElementById("fov-trend-panel");
+        if (panel) panel.classList.toggle("collapsed");
     };
 
     window.scrollToCard = function (sym) {
@@ -1079,6 +1235,86 @@
         if (isFinite(n) && n > 0) eqEl.value = Math.round(n).toLocaleString("en-US");
     });
 
+    // ── Universe summary + manual market picker (sim tab) ──
+    // Markets passing the current filter chips that actually have data — the
+    // default sim universe when nothing is explicitly selected.
+    function visibleSimSyms() {
+        return Array.from(document.querySelectorAll("#fov-tbody tr"))
+            .filter(tr => !tr.classList.contains("hidden") && !tr.classList.contains("pending"))
+            .map(tr => tr.dataset.sym)
+            .filter(s => payload && payload[s]);
+    }
+    function updateUniverseText() {
+        const el = document.getElementById("sim-universe-text");
+        const clearBtn = document.getElementById("sim-pick-clear");
+        if (!el) return;
+        if (selected.size > 0) {
+            el.textContent = `${selected.size} market${selected.size === 1 ? "" : "s"} selected`;
+            if (clearBtn) clearBtn.style.display = "";
+        } else {
+            const n = visibleSimSyms().length;
+            el.textContent = `all ${n} market${n === 1 ? "" : "s"} in scope`;
+            if (clearBtn) clearBtn.style.display = "none";
+        }
+    }
+    function renderPicker() {
+        const tbody = document.getElementById("sim-picker-tbody");
+        if (!tbody || !payload) return;
+        const q = (document.getElementById("sim-picker-search").value || "").trim().toUpperCase();
+        const syms = visibleSimSyms().filter(s =>
+            !q || s.toUpperCase().includes(q) || (rowMeta(s).name || "").toUpperCase().includes(q)
+        ).sort();
+        tbody.innerHTML = syms.map(s => {
+            const m = rowMeta(s);
+            const side = sideOf(s);
+            const cls = side === 1 ? "long" : side === -1 ? "short" : "flat";
+            const txt = side === 1 ? "long" : side === -1 ? "short" : "flat";
+            const on = selected.has(s);
+            return `<tr class="${on ? "picked" : ""}" onclick="pickerToggle('${s}')">
+                <td class="sim-picker-check"><i class="bi ${on ? "bi-check-square-fill" : "bi-square"}"></i></td>
+                <td class="fov-sym">${s}</td>
+                <td>${m.name}</td>
+                <td><span class="fov-chip-pill">${m.sector}</span></td>
+                <td><span class="sim-picker-side ${cls}">${txt}</span></td>
+            </tr>`;
+        }).join("") ||
+        `<tr><td class="label-mono" style="padding:1rem;color:var(--ink-4);">No markets match.</td></tr>`;
+    }
+    window.pickerToggle = function (sym) {
+        setSelected(sym, !selected.has(sym));
+        renderPicker(); renderSim(); updateUniverseText();
+        if (builderOpen) updateBuilderState();
+    };
+    window.pickerSelectVisible = function (on) {
+        visibleSimSyms().forEach(s => setSelected(s, on));
+        renderPicker(); renderSim(); updateUniverseText();
+        if (builderOpen) updateBuilderState();
+    };
+    function openPicker() {
+        pickerOpen = true;
+        const p = document.getElementById("sim-picker"); if (p) p.style.display = "";
+        const b = document.getElementById("sim-pick-btn"); if (b) b.classList.add("active");
+        renderPicker();
+        const s = document.getElementById("sim-picker-search"); if (s) s.focus();
+    }
+    window.closePicker = function () {
+        pickerOpen = false;
+        const p = document.getElementById("sim-picker"); if (p) p.style.display = "none";
+        const b = document.getElementById("sim-pick-btn"); if (b) b.classList.remove("active");
+    };
+    window.togglePicker = function (ev) {
+        if (ev) ev.stopPropagation();
+        pickerOpen ? closePicker() : openPicker();
+    };
+    // Confirm the selection by clicking anywhere outside the universe panel.
+    document.addEventListener("click", (ev) => {
+        if (!pickerOpen) return;
+        const panel = document.getElementById("sim-universe-panel");
+        if (panel && !panel.contains(ev.target)) closePicker();
+    });
+    const pickerSearch = document.getElementById("sim-picker-search");
+    if (pickerSearch) pickerSearch.addEventListener("input", renderPicker);
+
     // ── Diversified portfolio builder (optional tool) ──
     // Greedy low-correlation selection AGAINST a benchmark. The benchmark is
     // a reference only and never enters the book: the first pick is the
@@ -1099,7 +1335,7 @@
         if (el) el.textContent = text || "";
     }
     function ensureCorrelations() {
-        const key = loadedSubset;
+        const key = filters.size === "all" ? "all" : "micro";
         if (corrCache[key]) return Promise.resolve(corrCache[key]);
         if (corrInflight) return corrInflight;
         setBuilderState("loading correlations…");
@@ -1265,7 +1501,8 @@
         });
     };
 
-    // ── Async payload fetch (two-stage: micros first, all on demand) ──
+    // ── Progressive payload load (batched: paint a first batch fast, stream
+    //    the rest in the background) ──
     function setLoadState(text, kind) {
         const el = document.getElementById("fov-load-state");
         if (!el) return;
@@ -1276,48 +1513,82 @@
                        : kind === "warm"  ? "var(--ink-4)"
                                           : "var(--signature)";
     }
-    function loadPayload() {
-        setLoadState("· loading micro contracts…", "loading");
-        fetch("/futures/api/payload?subset=micro", { headers: { "Accept": "application/json" } })
-            .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
-            .then(p => {
-                payload = p;
-                loadedSubset = "micro";
-                setLoadState(null);
-                hydrate();
-                applyFilters();
-                if (mode === "sim") populateBenchmark();
-                if (window.Chart && window.LangeChart) {
-                    if (mode !== "sim") mountCharts(mode);
-                } else {
-                    const wait = () => (window.Chart && window.LangeChart)
-                        ? (mode !== "sim" ? mountCharts(mode) : null)
-                        : setTimeout(wait, 50);
-                    wait();
-                }
-            })
-            .catch(err => setLoadState("· could not load chart data: " + err.message, "error"));
+    function setProgress(done, total) {
+        const bar = document.getElementById("fov-progress-bar");
+        const txt = document.getElementById("fov-table-loading-text");
+        const block = document.getElementById("fov-table-loading");
+        const pct = total > 0 ? Math.round(100 * done / total) : 100;
+        if (bar) bar.style.width = pct + "%";
+        if (txt) txt.textContent = `Loading markets… ${done} / ${total}`;
+        if (block && done >= total) block.classList.add("done");
     }
-    async function loadFullPayload() {
-        if (loadedSubset === "all") return;
-        if (allFetchInflight) return allFetchInflight;
-        setLoadState("· expanding to all markets…", "loading");
-        allFetchInflight = fetch("/futures/api/payload?subset=all", { headers: { "Accept": "application/json" } })
-            .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
-            .then(p => {
-                payload = Object.assign({}, payload, p);
-                loadedSubset = "all";
-                setLoadState(null);
-                hydrate();
-                applyFilters();
-                if (mode === "sim") populateBenchmark();
-                else mountCharts(mode);
-            })
-            .catch(err => setLoadState("· could not expand to all markets: " + err.message, "error"))
-            .finally(() => { allFetchInflight = null; });
-        return allFetchInflight;
+    function chunk(arr, n) {
+        const out = [];
+        for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+        return out;
     }
-    loadPayload();
+    function domSymbols() {
+        const micro = [], rest = [];
+        document.querySelectorAll("#fov-tbody tr").forEach(tr => {
+            (tr.dataset.isMicro === "1" ? micro : rest).push(tr.dataset.sym);
+        });
+        return { micro, rest };
+    }
+    async function loadBatch(syms) {
+        if (!syms.length) return;
+        const qs = encodeURIComponent(syms.join(","));
+        let p = {};
+        try {
+            const r = await fetch(`/futures/api/payload?symbols=${qs}`, { headers: { "Accept": "application/json" } });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            p = await r.json();
+        } catch (err) {
+            setLoadState("· could not load some markets: " + err.message, "error");
+        }
+        payload = Object.assign(payload || {}, p);
+        syms.forEach(s => resolved.add(s));
+        hydrate();
+        applyVisibility();
+        if (mode === "curve" || mode === "term") mountVisibleCharts(mode);
+        if (mode === "sim") { populateBenchmark(); renderSim(); renderPicker(); updateUniverseText(); }
+    }
+    async function ensureRestLoading() {
+        if (bgLoading) return;
+        const pending = restSyms.filter(s => !resolved.has(s));
+        if (!pending.length) { setLoadState(null); return; }
+        bgLoading = true;
+        setLoadState("· loading remaining markets…", "warm");
+        for (const b of chunk(pending, BATCH)) await loadBatch(b);
+        setLoadState(null);
+        bgLoading = false;
+    }
+    async function startLoading() {
+        const s = domSymbols();
+        microSyms = s.micro; restSyms = s.rest;
+        // No micro markets configured? Treat the whole library as the first view.
+        if (!microSyms.length) { microSyms = restSyms; restSyms = []; }
+        const total = microSyms.length;
+        let done = 0;
+        setProgress(0, total || 1);
+        // First (small) batch paints immediately; the remaining micros follow
+        // in regular-sized chunks.
+        const batches = [microSyms.slice(0, FIRST_BATCH), ...chunk(microSyms.slice(FIRST_BATCH), BATCH)];
+        for (const b of batches) {
+            if (!b.length) continue;
+            await loadBatch(b);
+            done += b.length;
+            setProgress(done, total);
+        }
+        setProgress(total, total);
+        // Micros painted — quietly pull the rest of the library in the
+        // background so flipping Size → All is instant.
+        ensureRestLoading();
+    }
+    if (window.Chart && window.LangeChart) startLoading();
+    else {
+        const wait = () => (window.Chart && window.LangeChart) ? startLoading() : setTimeout(wait, 50);
+        wait();
+    }
     document.addEventListener("themechange", () => {
         if (!payload) return;
         setTimeout(() => {

@@ -133,13 +133,21 @@ async def futures_overview_page(request: Request):
 
 
 @router.get("/futures/api/payload")
-async def futures_overview_payload(subset: str = "micro"):
+async def futures_overview_payload(subset: str = "micro", symbols: str | None = None):
     """Per-symbol chart data + trend metric, cached. Hydrates the /futures
-    shell. ``subset='micro'`` (default) returns the micro contracts plus all
-    equities — much cheaper on cold start; ``subset='all'`` fills in the rest."""
+    shell.
+
+    ``symbols`` — a comma-separated list — returns just those markets and is
+    the batch/progressive-load path (first paint stays fast, the rest stream
+    in). Otherwise ``subset='micro'`` (default) returns only the micro
+    contracts and ``subset='all'`` fills in the rest."""
     if subset not in ("micro", "all"):
         subset = "all"
-    return JSONResponse(futures_overview.build_chart_payload(subset=subset))
+    syms = None
+    if symbols:
+        # Cap the batch so a crafted URL can't request an unbounded compute.
+        syms = [s.strip() for s in symbols.split(",") if s.strip()][:100]
+    return JSONResponse(futures_overview.build_chart_payload(subset=subset, symbols=syms))
 
 
 @router.get("/futures/api/correlations")

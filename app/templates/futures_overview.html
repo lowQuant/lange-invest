@@ -73,6 +73,11 @@
                 onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term Structure</button>
         <button class="fov-tab" data-mode="sim" role="tab"
                 onclick="setMode('sim')"><i class="bi bi-calculator"></i> Portfolio Simulator</button>
+        {% if user %}
+        <button class="fov-tab fov-tab-members" data-mode="strategy" role="tab"
+                onclick="setMode('strategy')"><i class="bi bi-shield-lock"></i> Strategy
+            <span class="fov-members-badge">members</span></button>
+        {% endif %}
     </div>
     <span class="label-mono fov-hint">
         <span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span>
@@ -370,6 +375,87 @@
     </div>
 </div>
 
+{% if user %}
+{# ── Strategy (members-only): b08 Donchian + loser-filter live signals ─────── #}
+<div id="fov-strategy" style="display:none;">
+    <div class="qt-panel mb-3">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-shield-lock"></i> Donchian breakout &middot; loser-filter</span>
+            <span class="label-mono" id="strat-asof" style="color:var(--ink-4);"></span>
+        </div>
+        <div class="qt-panel-body sim-form">
+            <div class="sim-input-row">
+                <label class="sim-input">
+                    <span class="ac-lbl">Account size</span>
+                    <div class="sim-input-field">
+                        <span class="sim-prefix">$</span>
+                        <input type="text" id="strat-equity" value="150,000" inputmode="numeric">
+                    </div>
+                </label>
+                <label class="sim-input">
+                    <span class="ac-lbl">Risk per position</span>
+                    <div class="sim-input-field">
+                        <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
+                        <span class="sim-suffix">%</span>
+                    </div>
+                </label>
+                <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
+                    <i class="bi bi-arrow-repeat"></i> Recompute
+                </button>
+            </div>
+            <div class="sim-formula">
+                Entry on a fresh <strong>50-day</strong> high above the <strong>200-day</strong> SMA (long) or a
+                50-day low below it (short); exit on the opposite <strong>20-day</strong> channel.
+                The <strong>loser filter</strong> only arms a market after its last closed trade <em>lost</em>
+                (or it never traded) — after a winner it stands aside, which is what cuts turnover and drawdown.
+                Sized <code>contracts = risk × equity / (ATR<sub>100</sub> × point value)</code>, capped at
+                1× / 2× / 4× of cash per position / side / total. A market too large or volatile to size
+                one contract outright falls back to its <strong>c1−c2 calendar spread</strong>, which carries
+                a fraction of the notional and trades on the same signal. Recomputed live from the
+                back-adjusted continuous curves — a direction check, not investment advice.
+            </div>
+        </div>
+    </div>
+
+    <div class="qt-panel mb-3" id="strat-summary-panel" style="display:none;">
+        <div class="qt-panel-body strat-summary" id="strat-summary"></div>
+    </div>
+
+    <div class="qt-panel">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Open positions</span>
+            <span class="label-mono" id="strat-totals" style="color:var(--ink-3);"></span>
+        </div>
+        <div class="qt-panel-body dense" style="padding:0;">
+            <div class="table-scroll">
+            <table class="table table-sm mb-0 fov-table strat-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th><th>Name</th><th>Sector</th><th>Side</th>
+                        <th class="text-end">Entry<span class="strat-foot">*</span></th>
+                        <th class="text-end">Last</th>
+                        <th class="text-end">Stop 3·ATR</th>
+                        <th class="text-end">ATR(100)</th>
+                        <th class="text-end">Pt&nbsp;value</th>
+                        <th class="text-end">Contracts</th>
+                        <th class="text-end">Notional</th>
+                        <th class="text-end">Margin&nbsp;10%</th>
+                    </tr>
+                </thead>
+                <tbody id="strat-tbody">
+                    <tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>
+                </tbody>
+            </table>
+            </div>
+            <div class="strat-footnote label-mono">
+                <span class="strat-foot">*</span> entry &amp; stop are continuous (back-adjusted) levels — they match real
+                quotes within the current contract.
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 {% endif %}
 {% endblock %}
 
@@ -619,6 +705,38 @@
     .sim-side.short { color: var(--down); background: var(--down-dim); }
     .sim-side.skip { color: var(--ink-4); background: var(--bg-3); }
 
+    /* Members-only "Strategy" tab + badge */
+    .fov-members-badge {
+        font-family: var(--mono); font-size: .55rem; letter-spacing: .12em;
+        text-transform: uppercase; color: var(--signature);
+        border: 1px solid var(--signature); border-radius: 999px;
+        padding: 0 .35rem; margin-left: .15rem; line-height: 1.4;
+    }
+    .fov-tab.active .fov-members-badge { color: var(--paper); border-color: var(--paper); }
+
+    /* Strategy panel */
+    .strat-refresh { align-self: flex-end; white-space: nowrap; }
+    .strat-summary {
+        display: flex; flex-wrap: wrap; gap: 1.1rem 1.75rem; padding: .85rem 1rem;
+    }
+    .strat-stat { display: flex; flex-direction: column; gap: .1rem; }
+    .strat-stat .v { font-family: var(--mono); font-size: 1.05rem; color: var(--ink-1); }
+    .strat-stat .l {
+        font-family: var(--mono); font-size: .6rem; letter-spacing: .1em;
+        text-transform: uppercase; color: var(--ink-3);
+    }
+    .strat-stat .v.long { color: var(--up); }
+    .strat-stat .v.short { color: var(--down); }
+    .strat-table td { white-space: nowrap; }
+    .strat-foot { color: var(--signature); font-size: .7em; vertical-align: super; }
+    .strat-footnote { padding: .5rem 1rem; color: var(--ink-4); border-top: 1px solid var(--line-1); }
+    .strat-locked { padding: 1.5rem 1rem; text-align: center; color: var(--ink-3); }
+    .strat-kind {
+        font-family: var(--mono); font-size: .55rem; letter-spacing: .06em;
+        color: var(--signature); border: 1px solid var(--signature);
+        border-radius: 3px; padding: 0 .25rem; margin-left: .3rem; cursor: help;
+    }
+
     /* Trend table: collapse control + progressive loading */
     .fov-trend-head { cursor: pointer; user-select: none; }
     .fov-collapse-btn {
@@ -712,7 +830,7 @@
 <script>
 (function () {
     // ── State ──
-    let mode = "curve";                  // curve | term | sim
+    let mode = "curve";                  // curve | term | sim | strategy (members)
     let payload = null;                  // {symbol: {last, trend_pct, trend_signal, atr100, multiplier, is_micro, curve_chart, term_chart}}
     const charts = new Map();
     const filters = { size: "micro", sector: "all", trend: "all" };
@@ -1027,24 +1145,35 @@
     window.setMode = function (m) {
         if (m === mode) return;
         mode = m;
+        const isChart = (m === "curve" || m === "term");
         document.querySelectorAll(".fov-tab").forEach(t =>
             t.classList.toggle("active", t.dataset.mode === m));
         document.getElementById("fov-mode-hint").textContent =
-            m === "curve" ? "close, back-adj · EMA(50), EMA(100)" :
-            m === "term"  ? "forward curve at the latest date, near→far by DTE" :
-                            "size positions by ATR(100) and point value";
-        document.getElementById("fov-charts").style.display = (m === "sim") ? "none" : "";
+            m === "curve"    ? "close, back-adj · EMA(50), EMA(100)" :
+            m === "term"     ? "forward curve at the latest date, near→far by DTE" :
+            m === "strategy" ? "Donchian-50 · SMA(200) · 20-day exit · loser filter" :
+                               "size positions by ATR(100) and point value";
+        document.getElementById("fov-charts").style.display = isChart ? "" : "none";
         document.getElementById("fov-sim").style.display = (m === "sim") ? "" : "none";
-        // The long trend dashboard is hidden in the simulator so the position
-        // sizing controls sit at the top — otherwise switching tabs looks like
-        // nothing changed until you scroll past the table.
+        const strat = document.getElementById("fov-strategy");
+        if (strat) strat.style.display = (m === "strategy") ? "" : "none";
+        // Filters drive the chart galleries / simulator only; the strategy tab
+        // shows the whole book, so hide the chip row there.
+        const filterBar = document.getElementById("fov-filters");
+        if (filterBar) filterBar.style.display = (m === "strategy") ? "none" : "";
+        // The long trend dashboard is hidden outside the chart tabs so the
+        // controls sit at the top — otherwise switching tabs looks like nothing
+        // changed until you scroll past the table.
         const trendPanel = document.getElementById("fov-trend-panel");
-        if (trendPanel) trendPanel.style.display = (m === "sim") ? "none" : "";
+        if (trendPanel) trendPanel.style.display = isChart ? "" : "none";
         if (m === "sim") {
-            // Switching INTO sim — drop the gallery charts so they don't keep
-            // ticking in memory while the user is on this tab.
+            // Drop the gallery charts so they don't keep ticking in memory.
             destroyAll();
             populateBenchmark();
+        } else if (m === "strategy") {
+            destroyAll();
+            closePicker();
+            loadStrategy(false);   // lazy: compute once, reuse on return
         } else {
             closePicker();
         }
@@ -1500,6 +1629,123 @@
             else updateBuilderState();
         });
     };
+
+    // ── Strategy tab (members-only): b08 Donchian + loser-filter ──
+    let stratData = null;          // last computed payload
+    let stratInflight = null;
+    let stratKey = "";             // account|risk the loaded data was sized for
+
+    function readStratInputs() {
+        const eqEl = document.getElementById("strat-equity");
+        const rkEl = document.getElementById("strat-risk");
+        if (!eqEl || !rkEl) return null;
+        return { equity: parseMoney(eqEl.value), risk: parseFloat(rkEl.value) / 100 };
+    }
+    function stratSideBadge(side) {
+        return side === 1 ? '<span class="sim-side long">LONG</span>'
+                          : '<span class="sim-side short">SHORT</span>';
+    }
+    function renderStratSummary() {
+        const s = stratData && stratData.summary;
+        const panel = document.getElementById("strat-summary-panel");
+        const box = document.getElementById("strat-summary");
+        const totals = document.getElementById("strat-totals");
+        if (!s || !box) { if (panel) panel.style.display = "none"; return; }
+        const acct = s.account || 0;
+        const pct = v => acct > 0 ? ` <span class="label-mono" style="color:var(--ink-4);">${(100*v/acct).toFixed(0)}%</span>` : "";
+        const spreadStat = s.n_spread > 0
+            ? `<div class="strat-stat"><span class="v">${s.n_spread}</span><span class="l">via c1−c2</span></div>` : "";
+        box.innerHTML =
+            `<div class="strat-stat"><span class="v">${s.n_sized}</span><span class="l">positions</span></div>
+             <div class="strat-stat"><span class="v long">${s.n_long}</span><span class="l">long</span></div>
+             <div class="strat-stat"><span class="v short">${s.n_short}</span><span class="l">short</span></div>
+             ${spreadStat}
+             <div class="strat-stat"><span class="v">${fmtMoney(s.gross_long)}${pct(s.gross_long)}</span><span class="l">gross long</span></div>
+             <div class="strat-stat"><span class="v">${fmtMoney(s.gross_short)}${pct(s.gross_short)}</span><span class="l">gross short</span></div>
+             <div class="strat-stat"><span class="v">${fmtMoney(s.gross_total)}${pct(s.gross_total)}</span><span class="l">gross total</span></div>
+             <div class="strat-stat"><span class="v">${fmtMoney(s.margin_est)}${pct(s.margin_est)}</span><span class="l">est. margin 10%</span></div>`;
+        panel.style.display = "";
+        if (totals) {
+            const skipped = (s.n_positions || 0) - (s.n_sized || 0);
+            totals.textContent = `${s.n_sized} sized${skipped > 0 ? ` · ${skipped} below 1 contract` : ""}`;
+        }
+    }
+    function renderStrategy() {
+        const tbody = document.getElementById("strat-tbody");
+        if (!tbody) return;
+        if (!stratData) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>';
+            return;
+        }
+        const asof = document.getElementById("strat-asof");
+        if (asof) asof.textContent = stratData.as_of ? `as of ${stratData.as_of}` : "";
+        if (stratData.error) {
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
+            const sp = document.getElementById("strat-summary-panel"); if (sp) sp.style.display = "none";
+            const tt = document.getElementById("strat-totals"); if (tt) tt.textContent = "";
+            return;
+        }
+        const pos = stratData.positions || [];
+        if (!pos.length) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">No markets are armed right now — every signal is flat or blocked by the loser filter (its last closed trade was a winner).</td></tr>';
+        } else {
+            tbody.innerHTML = pos.map(p => {
+                const kindTag = p.kind === "spread"
+                    ? ' <span class="strat-kind" title="Calendar spread (c1−c2): used when the outright is too large/volatile to size">c1−c2</span>'
+                    : "";
+                const qty = p.contracts > 0 ? fmtInt(p.contracts)
+                          : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>';
+                return `<tr>
+                    <td class="fov-sym">${p.symbol}${kindTag}</td>
+                    <td>${p.name}</td>
+                    <td><span class="fov-chip-pill">${p.sector}</span></td>
+                    <td>${stratSideBadge(p.side)}</td>
+                    <td class="text-end">${fmt4g(p.entry_px)}</td>
+                    <td class="text-end">${fmt4g(p.last)}</td>
+                    <td class="text-end">${fmt4g(p.stop)}</td>
+                    <td class="text-end">${fmt4g(p.atr)}</td>
+                    <td class="text-end">${fmt4g(p.point_value)}</td>
+                    <td class="text-end">${qty}</td>
+                    <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
+                    <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional * 0.10) : "—"}</td>
+                </tr>`;
+            }).join("");
+        }
+        renderStratSummary();
+    }
+    window.loadStrategy = function (force) {
+        const inp = readStratInputs();
+        if (!inp) return;
+        if (!isFinite(inp.equity) || inp.equity <= 0 || !isFinite(inp.risk) || inp.risk <= 0) {
+            stratData = { error: "Enter a positive account size and risk percentage." };
+            renderStrategy();
+            return;
+        }
+        const key = Math.round(inp.equity) + "|" + inp.risk;
+        if (!force && stratData && stratKey === key) return;   // already current
+        if (stratInflight) return;
+        const tbody = document.getElementById("strat-tbody");
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;"><span class="spinner-border spinner-border-sm"></span> Computing signals…</td></tr>';
+        const qs = `account=${encodeURIComponent(inp.equity)}&risk=${encodeURIComponent(inp.risk)}`;
+        stratInflight = fetch(`/futures/api/strategy?${qs}`, { headers: { "Accept": "application/json" } })
+            .then(r => {
+                if (r.status === 401) return { error: "Members only — please sign in again." };
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(d => { stratData = d; stratKey = key; renderStrategy(); })
+            .catch(err => { stratData = { error: "Could not compute signals: " + err.message }; renderStrategy(); })
+            .finally(() => { stratInflight = null; });
+    };
+    ["strat-equity", "strat-risk"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("change", () => loadStrategy(true));
+    });
+    const stratEq = document.getElementById("strat-equity");
+    if (stratEq) stratEq.addEventListener("blur", () => {
+        const n = parseMoney(stratEq.value);
+        if (isFinite(n) && n > 0) stratEq.value = Math.round(n).toLocaleString("en-US");
+    });
 
     // ── Progressive payload load (batched: paint a first batch fast, stream
     //    the rest in the background) ──

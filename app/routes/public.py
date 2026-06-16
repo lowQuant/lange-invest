@@ -160,6 +160,21 @@ async def futures_overview_correlations(subset: str = "micro", window: int = 250
     return JSONResponse(futures_overview.build_correlations(subset=subset, window=window))
 
 
+@router.get("/futures/api/strategy")
+async def futures_overview_strategy(request: Request, account: float = 150_000.0,
+                                    risk: float = 0.001):
+    """Members-only: current open positions of the b08 Donchian + loser-filter
+    strategy, sized for the given account at the given risk per position.
+
+    Gated on any authenticated session (no special entitlement) — anonymous
+    callers get 401 and the page never renders the tab for them."""
+    if current_user(request) is None:
+        return JSONResponse({"error": "members-only", "locked": True}, status_code=401)
+    account = max(1_000.0, min(account, 1e12))
+    risk = max(0.0001, min(risk, 0.05))
+    return JSONResponse(futures_overview.build_strategy_signals(account=account, risk=risk))
+
+
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────
 @router.get("/{ac_slug}", response_class=HTMLResponse)
 async def asset_class_landing(request: Request, ac_slug: str):

@@ -21,10 +21,12 @@ through this app's own /mcp endpoint invalidate immediately via
 """
 from __future__ import annotations
 
+import math
 import os
 import time
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
 from app import arctic_charting as ac
@@ -40,6 +42,12 @@ _CHART_CACHE: dict[str, dict[str, Any] | None] = {}
 _CORR_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
 # universe/Futures metadata, cached so batch payload calls don't re-read it.
 _UNI_CACHE: dict[str, Any] = {}
+# Per-symbol b08 strategy state (members-only "Strategy" tab). Independent of
+# account size / risk — only sizing depends on those — so it caches per symbol.
+_STRAT_CACHE: dict[str, dict[str, Any] | None] = {}
+# Per-symbol c1−c2 calendar-spread strategy state, computed lazily only for
+# markets whose outright is too large/volatile to size (and cached thereafter).
+_STRAT_SPREAD_CACHE: dict[str, dict[str, Any] | None] = {}
 
 # TTL so direct-to-ArcticDB writes (scripts, other processes) surface without a
 # web-process restart. Writes through this app's /mcp endpoint invalidate
@@ -60,6 +68,26 @@ NAME_COLS = ("name", "description", "long_name")
 MIN_HISTORY_POINTS = 150
 MAX_BACK_ADJ_RATIO = 10.0
 
+# ── b08 strategy (members-only "Strategy" tab) ───────────────────────────────
+# Donchian-50 breakout entry + SMA(200) trend filter + Donchian-20 opposite-
+# channel exit, with a "loser filter": after a *winning* closed trade on a
+# market the next signal is skipped; only a loss (or no prior trade) re-arms it.
+# Recomputed live from the back-adjusted continuous close. The 3·ATR catastrophe
+# stop is surfaced as a level for open positions but is NOT simulated in the
+# historical replay (the 20-day channel governs exits in this model), so the
+# series stays reproducible from the single curve we already read.
+STRAT_ENTRY = 50
+STRAT_EXIT = 20
+STRAT_SMA = 200
+STRAT_STOP_ATR = 3.0
+STRAT_RISK_DEFAULT = 0.001
+STRAT_ACCOUNT_DEFAULT = 150_000.0
+# Exposure caps as multiples of account equity (per-position / per-side / total).
+STRAT_CAP_POS = 1.0
+STRAT_CAP_SIDE = 2.0
+STRAT_CAP_TOTAL = 4.0
+STRAT_MARGIN_PCT = 0.10
+
 
 def invalidate_cache() -> None:
     global _cache_filled_at
@@ -67,6 +95,8 @@ def invalidate_cache() -> None:
     _CHART_CACHE.clear()
     _CORR_CACHE.clear()
     _UNI_CACHE.clear()
+    _STRAT_CACHE.clear()
+    _STRAT_SPREAD_CACHE.clear()
     _cache_filled_at = None
 
 
@@ -489,3 +519,351 @@ def build_correlations(subset: str = "micro", window: int = 250) -> dict[str, An
     _CORR_CACHE[key] = out
     _mark_filled()
     return out
+
+
+# ── b08 strategy signals (members-only) ──────────────────────────────────────
+
+def _close_series_from_entry(entry: dict[str, Any]) -> pd.Series:
+    """Clean daily back-adjusted close series from a payload entry's curve."""
+    chart = entry.get("curve_chart") or {}
+    x = chart.get("x_values") or []
+    data = (chart.get("datasets") or [{}])[0].get("data") or []
+    if not x or len(x) != len(data):
+        return pd.Series(dtype=float)
+    s = pd.Series(data, index=pd.to_datetime(x, errors="coerce"), dtype=float)
+    s = s[s.index.notna()].dropna()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s
+
+
+def _strategy_signal(close: pd.Series) -> np.ndarray:
+    """Per-bar target position (+1/-1/0) for the Donchian/SMA state machine.
+
+    Long while a fresh 50-day high prints above SMA(200) and held until a 20-day
+    low; short symmetrically. No look-ahead — the channels include the current
+    bar, i.e. the rule is "today made a new N-day extreme".
+    """
+    n = len(close)
+    out = np.zeros(n, dtype=np.int8)
+    if n < STRAT_SMA + 1:
+        return out
+    c = close.to_numpy(dtype=float)
+    hi_e = close.rolling(STRAT_ENTRY).max().to_numpy()
+    lo_e = close.rolling(STRAT_ENTRY).min().to_numpy()
+    hi_x = close.rolling(STRAT_EXIT).max().to_numpy()
+    lo_x = close.rolling(STRAT_EXIT).min().to_numpy()
+    sma = close.rolling(STRAT_SMA).mean().to_numpy()
+    state = 0
+    for i in range(n):
+        ci = c[i]
+        if state == 0:
+            if sma[i] == sma[i]:  # not NaN
+                if ci >= hi_e[i] and ci > sma[i]:
+                    state = 1
+                elif ci <= lo_e[i] and ci < sma[i]:
+                    state = -1
+        elif state == 1:
+            if ci <= lo_x[i]:
+                state = 0
+        else:  # state == -1
+            if ci >= hi_x[i]:
+                state = 0
+        out[i] = state
+    return out
+
+
+def _replay_loser_filter(close: pd.Series, target: np.ndarray) -> tuple[int, int, float, int]:
+    """Replay the signal with the loser-filter entry gate.
+
+    Returns ``(current_dir, entry_index, entry_px, last_result)`` for the
+    position held on the final bar. A new entry is taken only if the most recent
+    *closed* trade on this market lost (``last_result != 1``) or there was none
+    yet; after a winner the market is held flat and the signal keeps being
+    blocked until it resets — the mechanic that progressively reduces turnover.
+    """
+    c = close.to_numpy(dtype=float)
+    actual = 0
+    entry_px = float("nan")
+    entry_i = -1
+    last_result = 0
+    for i in range(len(c)):
+        t = int(target[i])
+        if t != actual:
+            if actual != 0:  # close the open trade, record win/loss
+                realised = actual * (c[i] - entry_px)
+                last_result = 1 if realised > 0 else -1
+                actual, entry_px, entry_i = 0, float("nan"), -1
+            if t != 0 and last_result != 1:  # loser-filter gate
+                actual, entry_px, entry_i = t, c[i], i
+    return actual, entry_i, entry_px, last_result
+
+
+def _strategy_for_symbol(sym: str, entry: dict[str, Any]) -> dict[str, Any] | None:
+    """Cached current strategy state for one market (sizing-independent)."""
+    if sym in _STRAT_CACHE:
+        return _STRAT_CACHE[sym]
+    close = _close_series_from_entry(entry)
+    if len(close) < STRAT_SMA + STRAT_EXIT:
+        _STRAT_CACHE[sym] = None
+        _mark_filled()
+        return None
+    target = _strategy_signal(close)
+    direction, entry_i, entry_px, last_result = _replay_loser_filter(close, target)
+    out = {
+        "dir": int(direction),
+        # Raw breakout state on the last bar (pre-loser-filter). Drives the
+        # "trending but too big to size → use the spread" decision, the same way
+        # the research engine's `trending_excluded` does.
+        "raw_signal": int(target[-1]) if len(target) else 0,
+        "entry_px": None if entry_i < 0 else float(entry_px),
+        "entry_date": None if entry_i < 0 else close.index[entry_i].date().isoformat(),
+        "last_result": int(last_result),
+        "as_of": close.index[-1].date().isoformat(),
+    }
+    _STRAT_CACHE[sym] = out
+    _mark_filled()
+    return out
+
+
+# ── c1−c2 calendar-spread fallback (too-large / too-volatile markets) ─────────
+
+def _continuous_spread(df: pd.DataFrame, col: str) -> pd.Series:
+    """Roll-adjusted continuous c1−c2 calendar spread (front minus second by DTE).
+
+    A raw rank1−rank2 series steps at every roll because the *pair* changes,
+    which both inflates the ATR and prints false breakouts. We additively
+    back-adjust at each roll (spreads are price differences, so the correction is
+    additive) to get a continuous series whose moves reflect the spread tightening
+    / widening, not the roll. Requires a ``dte`` column to rank by expiry.
+    """
+    if "dte" not in df.columns:
+        return pd.Series(dtype=float)
+    sel: list[tuple] = []  # (date, c1_sym, c2_sym, spread_raw)
+    for date in sorted(df.index.get_level_values(0).unique()):
+        try:
+            ds = df.loc[date]
+        except KeyError:
+            continue
+        if isinstance(ds, pd.Series):
+            continue
+        valid = ds[ds["dte"] > 0].sort_values("dte")
+        if len(valid) < 2:
+            continue
+        c1, c2 = valid.iloc[0], valid.iloc[1]
+        p1, p2 = c1[col], c2[col]
+        if pd.isna(p1) or pd.isna(p2):
+            continue
+        sel.append((date, c1.name, c2.name, float(p1) - float(p2)))
+
+    n = len(sel)
+    if n < 2:
+        return pd.Series([s[3] for s in sel], index=[s[0] for s in sel], dtype=float) if sel \
+            else pd.Series(dtype=float)
+    adj = [0.0] * n
+    for i in range(n - 1, 0, -1):
+        adj[i - 1] = adj[i]
+        if sel[i][1] == sel[i - 1][1]:  # same front contract → no roll
+            continue
+        d_i = sel[i][0]
+        c1_prev, c2_prev = sel[i - 1][1], sel[i - 1][2]
+        try:
+            old_spread = float(df.loc[(d_i, c1_prev), col]) - float(df.loc[(d_i, c2_prev), col])
+        except (KeyError, TypeError, ValueError):
+            old_spread = sel[i - 1][3]
+        adj[i - 1] = adj[i] + (sel[i][3] - old_spread)
+    return pd.Series([sel[i][3] + adj[i] for i in range(n)],
+                     index=[sel[i][0] for i in range(n)], dtype=float)
+
+
+def _spread_series(sym: str) -> pd.Series:
+    """Roll-adjusted continuous c1−c2 calendar-spread series for ``sym``.
+
+    A relative-value series with a fraction of the outright's notional and
+    volatility, so markets that can't be sized one-lot outright can still be
+    traded as a spread. Built from the per-contract MultiIndex in the public
+    ``futures`` library.
+    """
+    try:
+        df = public_access.read_data("futures", sym)
+    except Exception:  # noqa: BLE001
+        return pd.Series(dtype=float)
+    if not ac.detect_multiindex_contracts(df):
+        return pd.Series(dtype=float)
+    col = "close" if "close" in df.columns else next(
+        (c for c in df.columns if pd.api.types.is_numeric_dtype(df[c])), None)
+    if col is None:
+        return pd.Series(dtype=float)
+    try:
+        s = _continuous_spread(df, col)
+    except Exception:  # noqa: BLE001
+        return pd.Series(dtype=float)
+    if s.empty:
+        return s
+    s = pd.Series(s.values, index=pd.to_datetime(s.index, errors="coerce"), dtype=float)
+    s = s[s.index.notna()].dropna()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    return s
+
+
+def _spread_atr(spread: pd.Series) -> float | None:
+    """Close-to-close ATR(100) proxy for the spread (no per-leg high/low, so
+    true range collapses to |Δclose| — the standard choice for a spread)."""
+    if len(spread) < 20:
+        return None
+    tr = spread.diff().abs()
+    atr = tr.rolling(100, min_periods=20).mean().dropna()
+    return float(atr.iloc[-1]) if len(atr) else None
+
+
+def _spread_strategy_for_symbol(sym: str) -> dict[str, Any] | None:
+    """Cached current strategy state on the c1−c2 spread series (same Donchian +
+    loser-filter rules, the spread's own trade history)."""
+    if sym in _STRAT_SPREAD_CACHE:
+        return _STRAT_SPREAD_CACHE[sym]
+    spread = _spread_series(sym)
+    if len(spread) < STRAT_SMA + STRAT_EXIT:
+        _STRAT_SPREAD_CACHE[sym] = None
+        _mark_filled()
+        return None
+    target = _strategy_signal(spread)
+    direction, entry_i, entry_px, _ = _replay_loser_filter(spread, target)
+    out = {
+        "dir": int(direction),
+        "entry_px": None if entry_i < 0 else float(entry_px),
+        "entry_date": None if entry_i < 0 else spread.index[entry_i].date().isoformat(),
+        "last": float(spread.iloc[-1]),
+        "atr": _spread_atr(spread),
+        "as_of": spread.index[-1].date().isoformat(),
+    }
+    _STRAT_SPREAD_CACHE[sym] = out
+    _mark_filled()
+    return out
+
+
+def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
+                           risk: float = STRAT_RISK_DEFAULT) -> dict[str, Any]:
+    """Current open positions of the b08 Donchian + loser-filter strategy.
+
+    Sized for ``account`` at ``risk`` per position with the engine's exposure
+    caps (per-position 1×, per-side 2×, total 4× of cash). Reads only the public
+    ``futures`` library. Markets whose outright is too large/volatile to size at
+    one contract fall back to the **c1−c2 calendar spread**, which trades on its
+    own Donchian + loser-filter signal. Returns ``{positions, summary, as_of,
+    error}``.
+    """
+    _expire_stale()
+    if not ensure_connected():
+        return {"positions": [], "summary": {}, "as_of": None,
+                "error": "The data engine is not connected in this environment."}
+    uni = _read_universe_futures()
+    try:
+        symbols = sorted(public_access.list_symbols("futures"))
+    except Exception as e:  # noqa: BLE001
+        return {"positions": [], "summary": {}, "as_of": None,
+                "error": f"Could not list the futures library: {e}"}
+
+    raw: list[dict[str, Any]] = []
+    as_of: str | None = None
+    for sym in symbols:
+        entry = _payload_entry_for(sym, uni)
+        if not entry or not entry.get("curve_chart"):
+            continue
+        st = _strategy_for_symbol(sym, entry)
+        if st is None:
+            continue
+        if st["as_of"] and (as_of is None or st["as_of"] > as_of):
+            as_of = st["as_of"]
+
+        meta = _meta_for(sym, uni)
+        mult = meta["multiplier"]
+        atr_o, last_o = entry.get("atr100"), entry.get("last")
+        # Contracts the budget buys outright (pre-caps). < 1 ⇒ one contract
+        # already risks more than the per-position budget — too large/volatile.
+        raw_n_o = None
+        if atr_o and mult and last_o and atr_o > 0 and mult > 0 and last_o > 0:
+            raw_n_o = risk * account / (atr_o * mult)
+        outright_sizable = raw_n_o is not None and raw_n_o >= 1.0
+
+        if st["dir"] != 0 and outright_sizable:
+            raw.append({
+                "kind": "outright", "sym": sym, "name": meta["name"],
+                "sector": meta["sector"], "is_micro": meta["is_micro"],
+                "dir": st["dir"], "entry_px": st["entry_px"],
+                "entry_date": st["entry_date"], "atr": atr_o, "mult": mult,
+                "last": last_o,
+            })
+        elif st["raw_signal"] != 0 and not outright_sizable:
+            # Trending but too big to size outright → switch to the c1−c2 spread
+            # and flash a signal on the synthetic series if it's armed.
+            sp = _spread_strategy_for_symbol(sym)
+            if sp is None:
+                continue
+            if sp["as_of"] and (as_of is None or sp["as_of"] > as_of):
+                as_of = sp["as_of"]
+            if sp["dir"] != 0 and sp["atr"] and mult:
+                raw.append({
+                    "kind": "spread", "sym": sym, "name": meta["name"],
+                    "sector": meta["sector"], "is_micro": meta["is_micro"],
+                    "dir": sp["dir"], "entry_px": sp["entry_px"],
+                    "entry_date": sp["entry_date"], "atr": sp["atr"], "mult": mult,
+                    "last": sp["last"],
+                })
+
+    # Size oldest-entry-first so the per-side / total caps fill in trade order
+    # (the same order the live book would have accumulated them).
+    raw.sort(key=lambda r: (r["entry_date"] or ""))
+    positions: list[dict[str, Any]] = []
+    gl = gs = 0.0
+    n_sized = n_long = n_short = 0
+    for r in raw:
+        atr, mult, last, d = r["atr"], r["mult"], r["last"], r["dir"]
+        contracts = 0
+        notional = daily_risk = 0.0
+        stop = None
+        if atr and mult and atr > 0 and mult > 0:
+            raw_n = risk * account / (atr * mult)
+            cands = [raw_n]
+            # Notional uses |level| so a negative spread (contango) still sizes.
+            pc = abs(last) * mult if last is not None else 0.0
+            if pc > 0:  # honour the exposure caps when there's a real notional
+                sex = gl if d > 0 else gs
+                cands += [
+                    STRAT_CAP_POS * account / pc,
+                    max(0.0, STRAT_CAP_SIDE * account - sex) / pc,
+                    max(0.0, STRAT_CAP_TOTAL * account - gl - gs) / pc,
+                ]
+            n = int(math.floor(min(cands)))
+            if n >= 1:
+                contracts = n
+                notional = n * pc
+                daily_risk = n * atr * mult
+                if d > 0:
+                    gl += notional
+                    n_long += 1
+                else:
+                    gs += notional
+                    n_short += 1
+                n_sized += 1
+            if r["entry_px"] is not None:
+                stop = (r["entry_px"] - STRAT_STOP_ATR * atr) if d > 0 \
+                    else (r["entry_px"] + STRAT_STOP_ATR * atr)
+        positions.append({
+            "symbol": r["sym"], "name": r["name"], "sector": r["sector"],
+            "is_micro": r["is_micro"], "kind": r["kind"], "side": d,
+            "entry_px": r["entry_px"], "entry_date": r["entry_date"],
+            "last": last, "stop": stop, "atr": atr, "point_value": mult,
+            "contracts": contracts, "notional": notional, "daily_risk": daily_risk,
+        })
+
+    # Display order: sized positions first, largest notional on top.
+    positions.sort(key=lambda p: (p["contracts"] > 0, abs(p["notional"])), reverse=True)
+    n_spread = sum(1 for p in positions if p["kind"] == "spread" and p["contracts"] > 0)
+
+    summary = {
+        "account": account, "risk": risk,
+        "n_positions": len(positions), "n_sized": n_sized,
+        "n_long": n_long, "n_short": n_short, "n_spread": n_spread,
+        "gross_long": gl, "gross_short": gs, "gross_total": gl + gs,
+        "margin_est": STRAT_MARGIN_PCT * (gl + gs),
+    }
+    return {"positions": positions, "summary": summary, "as_of": as_of, "error": None}

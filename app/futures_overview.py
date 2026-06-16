@@ -611,10 +611,6 @@ def _strategy_for_symbol(sym: str, entry: dict[str, Any]) -> dict[str, Any] | No
     direction, entry_i, entry_px, last_result = _replay_loser_filter(close, target)
     out = {
         "dir": int(direction),
-        # Raw breakout state on the last bar (pre-loser-filter). Drives the
-        # "trending but too big to size → use the spread" decision, the same way
-        # the research engine's `trending_excluded` does.
-        "raw_signal": int(target[-1]) if len(target) else 0,
         "entry_px": None if entry_i < 0 else float(entry_px),
         "entry_date": None if entry_i < 0 else close.index[entry_i].date().isoformat(),
         "last_result": int(last_result),
@@ -638,41 +634,50 @@ def _continuous_spread(df: pd.DataFrame, col: str) -> pd.Series:
     """
     if "dte" not in df.columns:
         return pd.Series(dtype=float)
-    sel: list[tuple] = []  # (date, c1_sym, c2_sym, spread_raw)
-    for date in sorted(df.index.get_level_values(0).unique()):
-        try:
-            ds = df.loc[date]
-        except KeyError:
-            continue
-        if isinstance(ds, pd.Series):
-            continue
-        valid = ds[ds["dte"] > 0].sort_values("dte")
-        if len(valid) < 2:
-            continue
-        c1, c2 = valid.iloc[0], valid.iloc[1]
-        p1, p2 = c1[col], c2[col]
-        if pd.isna(p1) or pd.isna(p2):
-            continue
-        sel.append((date, c1.name, c2.name, float(p1) - float(p2)))
+    sub = df.loc[df["dte"] > 0, [col, "dte"]]
+    sub = sub[sub[col].notna()]
+    if len(sub) < 2:
+        return pd.Series(dtype=float)
 
-    n = len(sel)
+    # Vectorised front/second extraction: sort by (date, dte), take ranks 0 and 1
+    # within each date. Much cheaper than a per-date .loc over thousands of days.
+    flat = pd.DataFrame({
+        "date": sub.index.get_level_values(0),
+        "sym": sub.index.get_level_values(1),
+        "px": sub[col].to_numpy(dtype=float),
+        "dte": sub["dte"].to_numpy(dtype=float),
+    }).sort_values(["date", "dte"], kind="mergesort")
+    flat["rank"] = flat.groupby("date").cumcount()
+    c1 = flat[flat["rank"] == 0].set_index("date")
+    c2 = flat[flat["rank"] == 1].set_index("date")
+    pair = c1[["sym", "px"]].join(c2[["sym", "px"]], lsuffix="1", rsuffix="2", how="inner").sort_index()
+    n = len(pair)
+    if n == 0:
+        return pd.Series(dtype=float)
+
+    dates = pair.index.to_list()
+    sym1 = pair["sym1"].to_list()
+    sym2 = pair["sym2"].to_list()
+    spread_raw = (pair["px1"] - pair["px2"]).to_numpy(dtype=float)
     if n < 2:
-        return pd.Series([s[3] for s in sel], index=[s[0] for s in sel], dtype=float) if sel \
-            else pd.Series(dtype=float)
+        return pd.Series(spread_raw, index=dates, dtype=float)
+
+    # Roll lookups (~monthly) read the previous pair's prices on the roll date
+    # from the full frame, including contracts already past their DTE-rank.
+    price_map = df[col].to_dict()
     adj = [0.0] * n
     for i in range(n - 1, 0, -1):
         adj[i - 1] = adj[i]
-        if sel[i][1] == sel[i - 1][1]:  # same front contract → no roll
+        if sym1[i] == sym1[i - 1]:  # same front contract → no roll
             continue
-        d_i = sel[i][0]
-        c1_prev, c2_prev = sel[i - 1][1], sel[i - 1][2]
-        try:
-            old_spread = float(df.loc[(d_i, c1_prev), col]) - float(df.loc[(d_i, c2_prev), col])
-        except (KeyError, TypeError, ValueError):
-            old_spread = sel[i - 1][3]
-        adj[i - 1] = adj[i] + (sel[i][3] - old_spread)
-    return pd.Series([sel[i][3] + adj[i] for i in range(n)],
-                     index=[sel[i][0] for i in range(n)], dtype=float)
+        p1 = price_map.get((dates[i], sym1[i - 1]))
+        p2 = price_map.get((dates[i], sym2[i - 1]))
+        if p1 is None or p2 is None or pd.isna(p1) or pd.isna(p2):
+            old_spread = float(spread_raw[i - 1])
+        else:
+            old_spread = float(p1) - float(p2)
+        adj[i - 1] = adj[i] + (float(spread_raw[i]) - old_spread)
+    return pd.Series([spread_raw[i] + adj[i] for i in range(n)], index=dates, dtype=float)
 
 
 def _spread_series(sym: str) -> pd.Series:
@@ -784,17 +789,20 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
             raw_n_o = risk * account / (atr_o * mult)
         outright_sizable = raw_n_o is not None and raw_n_o >= 1.0
 
-        if st["dir"] != 0 and outright_sizable:
-            raw.append({
-                "kind": "outright", "sym": sym, "name": meta["name"],
-                "sector": meta["sector"], "is_micro": meta["is_micro"],
-                "dir": st["dir"], "entry_px": st["entry_px"],
-                "entry_date": st["entry_date"], "atr": atr_o, "mult": mult,
-                "last": last_o,
-            })
-        elif st["raw_signal"] != 0 and not outright_sizable:
-            # Trending but too big to size outright → switch to the c1−c2 spread
-            # and flash a signal on the synthetic series if it's armed.
+        if outright_sizable:
+            # Tradeable as an outright — take it only if its own signal is armed.
+            if st["dir"] != 0:
+                raw.append({
+                    "kind": "outright", "sym": sym, "name": meta["name"],
+                    "sector": meta["sector"], "is_micro": meta["is_micro"],
+                    "dir": st["dir"], "entry_px": st["entry_px"],
+                    "entry_date": st["entry_date"], "atr": atr_o, "mult": mult,
+                    "last": last_o,
+                })
+        else:
+            # Too large/volatile to size one contract outright → evaluate the
+            # c1−c2 calendar spread as a STANDALONE market: same Donchian + loser
+            # filter on the spread's own series. No spread signal → no trade.
             sp = _spread_strategy_for_symbol(sym)
             if sp is None:
                 continue

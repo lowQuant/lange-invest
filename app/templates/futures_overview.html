@@ -410,9 +410,10 @@
                 (or it never traded) — after a winner it stands aside, which is what cuts turnover and drawdown.
                 Sized <code>contracts = risk × equity / (ATR<sub>100</sub> × point value)</code>, capped at
                 1× / 2× / 4× of cash per position / side / total. A market too large or volatile to size
-                one contract outright falls back to its <strong>c1−c2 calendar spread</strong>, which carries
-                a fraction of the notional and trades on the same signal. Recomputed live from the
-                back-adjusted continuous curves — a direction check, not investment advice.
+                one contract outright is traded instead as its <strong>c1−c2 calendar spread</strong> — a
+                standalone series with a fraction of the notional, carrying <em>its own</em> 50/200/20
+                Donchian signal (no spread signal, no trade). Recomputed live from the back-adjusted
+                continuous curves — a direction check, not investment advice.
             </div>
         </div>
     </div>
@@ -1691,7 +1692,7 @@
         } else {
             tbody.innerHTML = pos.map(p => {
                 const kindTag = p.kind === "spread"
-                    ? ' <span class="strat-kind" title="Calendar spread (c1−c2): used when the outright is too large/volatile to size">c1−c2</span>'
+                    ? ' <span class="strat-kind" title="Traded as the c1−c2 calendar spread (outright too large/volatile to size); signal computed on the spread series itself">c1−c2</span>'
                     : "";
                 const qty = p.contracts > 0 ? fmtInt(p.contracts)
                           : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>';

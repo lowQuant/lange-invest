@@ -73,11 +73,12 @@
                 onclick="setMode('term')"><i class="bi bi-bar-chart-steps"></i> Term Structure</button>
         <button class="fov-tab" data-mode="sim" role="tab"
                 onclick="setMode('sim')"><i class="bi bi-calculator"></i> Portfolio Simulator</button>
-        {% if user %}
-        <button class="fov-tab fov-tab-members" data-mode="strategy" role="tab"
-                onclick="setMode('strategy')"><i class="bi bi-shield-lock"></i> Strategy
+        {# Members-only tab — shown to everyone so guests can see there's more
+           behind the wall (and have a reason to ask for access); guests get a
+           locked teaser instead of the live book. #}
+        <button class="fov-tab fov-tab-members{% if not user %} fov-tab-locked{% endif %}" data-mode="strategy" role="tab"
+                onclick="setMode('strategy')"><i class="bi bi-{% if user %}shield-lock{% else %}lock-fill{% endif %}"></i> Strategy
             <span class="fov-members-badge">members</span></button>
-        {% endif %}
     </div>
     <span class="label-mono fov-hint">
         <span id="fov-mode-hint">close, back-adj &middot; EMA(50), EMA(100)</span>
@@ -375,9 +376,9 @@
     </div>
 </div>
 
-{% if user %}
 {# ── Strategy (members-only): b08 Donchian + loser-filter live signals ─────── #}
 <div id="fov-strategy" style="display:none;">
+{% if user %}
     <div class="qt-panel mb-3">
         <div class="qt-panel-head">
             <span class="qt-panel-head-title"><i class="bi bi-shield-lock"></i> Donchian breakout &middot; loser-filter</span>
@@ -454,8 +455,35 @@
             </div>
         </div>
     </div>
-</div>
+{% else %}
+    {# Guest teaser: show what's behind the wall so there's a reason to ask. #}
+    <div class="qt-panel">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-shield-lock"></i> Donchian breakout &middot; loser-filter</span>
+            <span class="fov-members-badge">members</span>
+        </div>
+        <div class="strat-locked">
+            <i class="bi bi-lock-fill" style="font-size:1.7rem;color:var(--signature);"></i>
+            <h5 style="margin:.7rem 0 .35rem;font-family:var(--serif);font-weight:500;">A members-only strategy desk</h5>
+            <p style="max-width:52ch;margin:0 auto .4rem;">
+                The live open book of the <strong>Donchian breakout</strong> system with the
+                <strong>loser filter</strong>: a fresh 50-day high above the 200-day SMA arms a long,
+                the opposite 20-day channel exits, and a market only re-arms after a <em>losing</em>
+                trade — the mechanic that cuts turnover and drawdown. Positions are sized to your
+                account with ATR(100) risk and exposure caps, recomputed live, with a c1−c2 calendar
+                spread fallback for markets too large to size outright.
+            </p>
+            <p class="label-mono" style="color:var(--ink-4);margin:.4rem 0 1.1rem;">
+                Sign in or request access to unlock the live signals.
+            </p>
+            <div class="d-flex gap-2 justify-content-center">
+                <a href="/login?next=/futures" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-right"></i> Sign in</a>
+                <a href="/request-access" class="btn btn-outline-secondary btn-sm">Request access</a>
+            </div>
+        </div>
+    </div>
 {% endif %}
+</div>
 
 {% endif %}
 {% endblock %}
@@ -714,6 +742,9 @@
         padding: 0 .35rem; margin-left: .15rem; line-height: 1.4;
     }
     .fov-tab.active .fov-members-badge { color: var(--paper); border-color: var(--paper); }
+    /* Locked (guest) variant of the members tab — the lock glyph picks up the
+       signature colour so it reads as "there's more here", not "disabled". */
+    .fov-tab-locked .bi { color: var(--signature); }
 
     /* Strategy panel */
     .strat-refresh { align-self: flex-end; white-space: nowrap; }

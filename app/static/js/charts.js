@@ -135,8 +135,21 @@
             return _afterMount(chart);
         }
 
+        // Donchian "trades" specs don't draw as a line — they drive a background
+        // plugin that paints each breakout trade green (winner) / red (loser).
+        const tradeSpecs = (chartData.datasets || []).filter((ds) => ds.is_donchian_trades);
+        const drawable = (chartData.datasets || []).filter((ds) => !ds.is_donchian_trades);
+
         let datasetIdx = 0, studyIdx = 0;
-        const datasets = (chartData.datasets || []).map((ds) => {
+        const datasets = drawable.map((ds) => {
+            if (ds.is_donchian === true) {
+                // Channel envelope — quiet dashed lines; the green/red shading
+                // (below) carries the winner/loser signal.
+                return {
+                    label: ds.label, data: ds.data, borderColor: c.tick, backgroundColor: "transparent",
+                    borderDash: [2, 3], borderWidth: 1, pointRadius: 0, tension: 0, fill: false, order: 8,
+                };
+            }
             if (ds.is_study === true) {
                 const sColor = STUDY_COLORS[studyIdx++ % STUDY_COLORS.length];
                 return {
@@ -154,9 +167,44 @@
             };
         });
 
+        // Background painter for Donchian trades: a translucent band per trade,
+        // spanning entry→exit on x and the full plot height, green for winners
+        // and red for losers. Drawn behind the series.
+        const localPlugins = [];
+        const allTrades = tradeSpecs.reduce((acc, t) => acc.concat(t.trades || []), []);
+        if (allTrades.length) {
+            const toRgba = (hex, a) => {
+                const v = (hex || "").replace("#", "");
+                if (v.length !== 6) return hex;
+                const r = parseInt(v.slice(0, 2), 16), g = parseInt(v.slice(2, 4), 16), b = parseInt(v.slice(4, 6), 16);
+                return `rgba(${r},${g},${b},${a})`;
+            };
+            const winC = toRgba(cssVar('--up') || '#2d5a3d', 0.16);
+            const loseC = toRgba(cssVar('--down') || '#8c2f1f', 0.16);
+            localPlugins.push({
+                id: "donchianTrades",
+                beforeDatasetsDraw(ch) {
+                    const meta = ch.getDatasetMeta(0);
+                    if (!meta || !meta.data || !meta.data.length) return;
+                    const { ctx: cx, chartArea: area } = ch;
+                    if (!area) return;
+                    cx.save();
+                    allTrades.forEach((t) => {
+                        const a = meta.data[t.start], b = meta.data[t.end];
+                        if (!a || !b) return;
+                        const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
+                        cx.fillStyle = t.win ? winC : loseC;
+                        cx.fillRect(x0, area.top, Math.max(1, x1 - x0), area.bottom - area.top);
+                    });
+                    cx.restore();
+                },
+            });
+        }
+
         const chart = new Chart(ctx, {
             type: type,
             data: { labels: chartData.x_values, datasets: datasets },
+            plugins: localPlugins,
             options: {
                 responsive: true, maintainAspectRatio: false,
                 scales: {

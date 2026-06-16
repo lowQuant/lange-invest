@@ -12,6 +12,7 @@ consumed by the shared LangeChart JS module.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 import pandas as pd
@@ -274,8 +275,79 @@ def _study_datasets(data: list, studies_str: str) -> list[dict]:
     for sc in cfgs:
         t = sc.get("type", "sma")
         p = int(sc.get("period", 20))
-        out.append({"label": f"{t.upper()}({p})", "data": _study(data, t, p), "is_study": True})
+        if t == "donchian":
+            out += _donchian_datasets(data, p)
+        else:
+            out.append({"label": f"{t.upper()}({p})", "data": _study(data, t, p), "is_study": True})
     return out
+
+
+# ── Donchian channel + win/loss trade shading ────────────────────────────────
+
+def _donchian_datasets(values: list, period: int) -> list[dict]:
+    """Donchian channel of the plotted series plus the breakout trades it makes.
+
+    Emits the upper/lower channel lines (rolling high/low of the series) and a
+    companion ``is_donchian_trades`` spec carrying each trade tagged win/loss, so
+    the chart can paint the period green (winner) or red (loser).
+    """
+    if period < 1:
+        period = 20
+    s = pd.Series(values, dtype=float)
+    upper = s.rolling(period, min_periods=period).max()
+    lower = s.rolling(period, min_periods=period).min()
+
+    def _ser(x: pd.Series) -> list:
+        return [None if pd.isna(v) else round(float(v), 6) for v in x.tolist()]
+
+    return [
+        {"label": f"Donchian Hi({period})", "data": _ser(upper), "is_donchian": True},
+        {"label": f"Donchian Lo({period})", "data": _ser(lower), "is_donchian": True},
+        {"label": f"Donchian({period}) trades", "data": [], "is_donchian_trades": True,
+         "trades": _donchian_trades(values, period)},
+    ]
+
+
+def _donchian_trades(values: list, period: int) -> list[dict]:
+    """Classic Donchian reversal trades over the plotted series.
+
+    Always-in after warm-up: go long on a fresh ``period``-bar high, reverse
+    short on a fresh ``period``-bar low (channels use the prior bar, so no
+    look-ahead). Each closed trade is scored win/loss by its directional P&L; the
+    still-open final trade is scored on the last mark. Indices index into the
+    same series the chart plots, so the front-end can map them straight to x.
+    """
+    if period < 1:
+        return []
+    s = pd.Series(values, dtype=float)
+    n = len(s)
+    if n == 0:
+        return []
+    c = s.to_numpy(dtype=float)
+    hi = s.rolling(period, min_periods=period).max().shift(1).to_numpy()
+    lo = s.rolling(period, min_periods=period).min().shift(1).to_numpy()
+    trades: list[dict] = []
+    direction = 0
+    entry_i = -1
+    for i in range(n):
+        if math.isnan(c[i]):
+            continue
+        signal = direction
+        if not math.isnan(hi[i]) and c[i] > hi[i]:
+            signal = 1
+        elif not math.isnan(lo[i]) and c[i] < lo[i]:
+            signal = -1
+        if signal != direction:
+            if direction != 0 and entry_i >= 0:
+                pnl = direction * (c[i] - c[entry_i])
+                trades.append({"start": entry_i, "end": i, "side": direction, "win": bool(pnl > 0)})
+            direction = signal
+            entry_i = i
+    if direction != 0 and 0 <= entry_i < n - 1:
+        pnl = direction * (c[n - 1] - c[entry_i])
+        trades.append({"start": entry_i, "end": n - 1, "side": direction,
+                       "win": bool(pnl > 0), "open": True})
+    return trades
 
 
 def _fmt_index(v) -> str:

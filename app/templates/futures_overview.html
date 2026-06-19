@@ -379,60 +379,62 @@
 {# ── Strategy (members-only): b08 Donchian + loser-filter live signals ─────── #}
 <div id="fov-strategy" style="display:none;">
 {% if user %}
-    <div class="qt-panel mb-3">
-        <div class="qt-panel-head">
-            <span class="qt-panel-head-title"><i class="bi bi-shield-lock"></i> Donchian breakout &middot; loser-filter</span>
-            <span class="label-mono" id="strat-asof" style="color:var(--ink-4);"></span>
-        </div>
-        <div class="qt-panel-body sim-form">
-            <div class="sim-input-row">
-                <label class="sim-input">
-                    <span class="ac-lbl">Account size</span>
-                    <div class="sim-input-field">
-                        <span class="sim-prefix">$</span>
-                        <input type="text" id="strat-equity" value="150,000" inputmode="numeric">
-                    </div>
-                </label>
-                <label class="sim-input">
-                    <span class="ac-lbl">Risk per position</span>
-                    <div class="sim-input-field">
-                        <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
-                        <span class="sim-suffix">%</span>
-                    </div>
-                </label>
-                <label class="sim-input">
-                    <span class="ac-lbl">Max daily $ impact <span class="ac-lbl-note">per contract, optional</span></span>
-                    <div class="sim-input-field">
-                        <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
-                        <span class="sim-suffix">bps</span>
-                    </div>
-                </label>
-            </div>
-            <div class="sim-controls-row">
-                <label class="strat-switch" title="Toggle the optional 200-day SMA trend gate. The combined-universe backtest showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
-                    <input type="checkbox" id="strat-trend">
-                    <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
-                    <span class="ac-lbl">200-day trend filter</span>
-                </label>
-                <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
-                    <i class="bi bi-arrow-repeat"></i> Recompute
-                </button>
-            </div>
-            <div class="sim-formula">
-                Combined universe: every market's <strong>outright</strong> and its <strong>c1−c2 calendar
-                spread</strong> are independent instruments carrying the same signal (a spread joins only after
-                ≥10 historical firings). Entry on a fresh <strong>50-day</strong> high (long) or low (short);
-                exit on the opposite <strong>20-day</strong> channel. The optional <strong>200-day SMA</strong>
-                gate is <em>off by default</em> — backtests showed it adds nothing once the loser filter is on.
-                The <strong>loser filter</strong> only arms a market after its last closed trade <em>lost</em>
-                (or it never traded) — after a winner it stands aside, which is what cuts turnover and drawdown.
-                Sized <code>contracts = risk × equity / (ATR<sub>100</sub> × point value)</code>, capped at
-                1× / 2× / 4× of cash per position / side / total. <strong>Avg daily $ move</strong> is
-                ATR<sub>100</sub> × point value; the <strong>bps</strong> filter narrows the book by that move
-                as a fraction of the account. The full signal universe is always computed — the filter only
-                changes what's shown. A direction check, not investment advice.
-            </div>
-        </div>
+    {# ── Article-style intro — short prose, no box ── #}
+    <header class="strat-intro">
+        <span class="eyebrow"><i class="bi bi-shield-lock"></i> Strategy &middot; members</span>
+        <h2 class="strat-intro-title">Donchian breakout, loser-filtered</h2>
+        <p class="strat-intro-lead">
+            A fresh 50-day high (or low) opens the trade and the opposite 20-day channel closes it — but a
+            market only re-arms after its last trade <em>lost</em>, which is what cuts the turnover and the
+            drawdown. The signal runs on every market's outright <em>and</em> its c1−c2 calendar spread as
+            independent instruments. <a href="#" id="strat-notes-link" onclick="toggleStratNotes();return false;">Method notes</a>
+        </p>
+        <p class="strat-notes" id="strat-notes" style="display:none;">
+            The 200-day SMA trend gate is optional and off by default — backtests showed it adds nothing once
+            the loser filter is on. Positions size to <code>risk × equity / (ATR<sub>100</sub> × point value)</code>,
+            capped at 1× / 2× / 4× of cash per position / side / total. <em>Avg daily&nbsp;$</em> is
+            ATR<sub>100</sub> × point value (one contract's typical daily swing); the bps filter narrows the
+            book by that move as a fraction of the account. The full universe is always computed — the filter
+            only changes what's shown. A direction check, not investment advice.
+        </p>
+    </header>
+
+    {# ── Small collapsible sizing & filter menu (results stay the focus) ── #}
+    <div class="strat-toolbar">
+        <button class="strat-toolbar-toggle" id="strat-controls-toggle"
+                onclick="toggleStratControls()" aria-expanded="false">
+            <i class="bi bi-sliders"></i> Sizing &amp; filters
+            <span class="strat-toolbar-summary" id="strat-toolbar-summary"></span>
+            <i class="bi bi-chevron-down strat-toolbar-caret"></i>
+        </button>
+        <span class="label-mono strat-asof" id="strat-asof"></span>
+    </div>
+    <div class="strat-controls" id="strat-controls" style="display:none;">
+        <label class="strat-ctl">
+            <span class="ac-lbl">Account</span>
+            <span class="strat-ctl-field"><span class="sim-prefix">$</span>
+                <input type="text" id="strat-equity" value="150,000" inputmode="numeric"></span>
+        </label>
+        <label class="strat-ctl">
+            <span class="ac-lbl">Risk / position</span>
+            <span class="strat-ctl-field">
+                <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
+                <span class="sim-suffix">%</span></span>
+        </label>
+        <label class="strat-ctl">
+            <span class="ac-lbl">Max daily $ <span class="ac-lbl-note">optional</span></span>
+            <span class="strat-ctl-field">
+                <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
+                <span class="sim-suffix">bps</span></span>
+        </label>
+        <label class="strat-switch" title="Optional 200-day SMA trend gate. Backtests showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
+            <input type="checkbox" id="strat-trend">
+            <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
+            <span class="ac-lbl">200-day trend filter</span>
+        </label>
+        <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
+            <i class="bi bi-arrow-repeat"></i> Recompute
+        </button>
     </div>
 
     <div class="qt-panel mb-3" id="strat-summary-panel" style="display:none;">
@@ -776,11 +778,59 @@
     .fov-tab-locked .bi { color: var(--signature); }
 
     /* Strategy panel */
-    .strat-refresh { align-self: flex-end; white-space: nowrap; }
-    .sim-controls-row {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 1rem; flex-wrap: wrap; margin-top: .85rem;
+    .strat-refresh { white-space: nowrap; }
+
+    /* Article-style intro (no box) */
+    .strat-intro { max-width: 70ch; margin: .25rem 0 1.4rem; }
+    .strat-intro-title {
+        font-family: var(--serif); font-weight: 500; font-size: 1.5rem;
+        margin: .35rem 0 .5rem; color: var(--ink-1); letter-spacing: .01em;
     }
+    .strat-intro-lead { color: var(--ink-2); font-size: .95rem; line-height: 1.6; margin: 0; }
+    .strat-intro-lead a { color: var(--signature); text-decoration: none; border-bottom: 1px dotted var(--signature); }
+    .strat-notes {
+        margin: .7rem 0 0; padding-top: .7rem; border-top: 1px solid var(--line-1);
+        color: var(--ink-3); font-size: .82rem; line-height: 1.6;
+    }
+    .strat-notes code { background: var(--bg-3); padding: .1rem .35rem; border-radius: 3px; color: var(--ink-1); }
+
+    /* Compact, collapsible sizing & filter menu */
+    .strat-toolbar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem;
+    }
+    .strat-toolbar-toggle {
+        display: inline-flex; align-items: center; gap: .5rem;
+        background: transparent; border: 1px solid var(--line-2); border-radius: 999px;
+        padding: .3rem .85rem; cursor: pointer; color: var(--ink-2);
+        font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+        transition: color .12s, border-color .12s, background .12s;
+    }
+    .strat-toolbar-toggle:hover { color: var(--ink-1); border-color: var(--line-3); }
+    .strat-toolbar-toggle .bi { color: var(--signature); }
+    .strat-toolbar-summary { color: var(--ink-4); text-transform: none; letter-spacing: 0; }
+    .strat-toolbar-caret { transition: transform .18s; }
+    .strat-toolbar-toggle[aria-expanded="true"] .strat-toolbar-caret { transform: rotate(180deg); }
+    .strat-asof { color: var(--ink-4); }
+    .strat-controls {
+        display: flex; align-items: flex-end; flex-wrap: wrap; gap: 1rem 1.25rem;
+        margin-bottom: 1rem; padding: .85rem 1rem;
+        border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg-1);
+    }
+    .strat-ctl { display: flex; flex-direction: column; gap: .3rem; }
+    .strat-ctl-field {
+        display: inline-flex; align-items: center; gap: .35rem;
+        border: 1px solid var(--line-2); border-radius: 4px; background: var(--bg-1); padding: 0 .55rem;
+        transition: border-color .12s;
+    }
+    .strat-ctl-field:focus-within { border-color: var(--signature); }
+    .strat-ctl-field input {
+        border: 0; outline: 0; background: transparent; width: 7.5ch;
+        font-family: var(--mono); font-size: .85rem; font-variant-numeric: tabular-nums;
+        color: var(--ink-1); padding: .35rem 0;
+    }
+    .strat-controls .strat-switch { align-self: center; }
+
     /* Trend-filter toggle switch */
     .strat-switch { display: inline-flex; align-items: center; gap: .55rem; cursor: pointer; user-select: none; }
     .strat-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -1928,13 +1978,46 @@
     // only the explicit "Recompute" button rebuilds the universe (force=true).
     ["strat-equity", "strat-risk", "strat-trend", "strat-maxbps"].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener("change", () => loadStrategy(false));
+        if (el) el.addEventListener("change", () => { updateStratToolbarSummary(); loadStrategy(false); });
     });
     const stratEq = document.getElementById("strat-equity");
     if (stratEq) stratEq.addEventListener("blur", () => {
         const n = parseMoney(stratEq.value);
         if (isFinite(n) && n > 0) stratEq.value = Math.round(n).toLocaleString("en-US");
+        updateStratToolbarSummary();
     });
+
+    // ── Collapsible sizing/filter menu + method notes ──
+    window.toggleStratControls = function () {
+        const box = document.getElementById("strat-controls");
+        const btn = document.getElementById("strat-controls-toggle");
+        if (!box || !btn) return;
+        const open = box.style.display === "none";
+        box.style.display = open ? "" : "none";
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    window.toggleStratNotes = function () {
+        const n = document.getElementById("strat-notes");
+        const link = document.getElementById("strat-notes-link");
+        if (!n) return;
+        const open = n.style.display === "none";
+        n.style.display = open ? "" : "none";
+        if (link) link.textContent = open ? "Hide notes" : "Method notes";
+    };
+    // Mirror the current settings into the collapsed toolbar so the menu can
+    // stay shut without hiding what the table is sized for.
+    function updateStratToolbarSummary() {
+        const el = document.getElementById("strat-toolbar-summary");
+        const inp = readStratInputs();
+        if (!el || !inp) return;
+        const bits = [];
+        if (isFinite(inp.equity) && inp.equity > 0) bits.push("$" + Math.round(inp.equity).toLocaleString("en-US"));
+        if (isFinite(inp.risk) && inp.risk > 0) bits.push((inp.risk * 100).toFixed(2) + "% risk");
+        bits.push(inp.trend ? "trend on" : "trend off");
+        if (inp.maxBps != null) bits.push("≤" + inp.maxBps + "bps");
+        el.textContent = bits.length ? "· " + bits.join(" · ") : "";
+    }
+    updateStratToolbarSummary();
 
     // ── Progressive payload load (batched: paint a first batch fast, stream
     //    the rest in the background) ──

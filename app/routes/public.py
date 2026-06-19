@@ -163,39 +163,34 @@ async def futures_overview_correlations(subset: str = "micro", window: int = 250
 @router.get("/futures/api/strategy")
 async def futures_overview_strategy(request: Request, account: float = 150_000.0,
                                     risk: float = 0.001, trend: bool = False,
-                                    min_bps: float | None = None,
-                                    max_bps: float | None = None, force: bool = False):
-    """Members-only: current open positions of the Donchian + loser-filter
-    strategy on the combined (outright + c1−c2 spread) universe.
+                                    force: bool = False):
+    """Members-only: live signals of the Donchian + loser-filter strategy on the
+    combined (outright + c1−c2 spread) universe.
 
     Sized for the given account at the given risk per position. ``trend`` toggles
-    the optional 200-day SMA gate; ``min_bps`` / ``max_bps`` filter instruments
-    by their average daily dollar move as bps of the account; ``force`` bypasses
-    the cache and recomputes. Gated on any authenticated session (no special
-    entitlement) — anonymous callers get 401 and the page never renders the tab
-    for them."""
+    the optional 200-day SMA gate; ``force`` bypasses the cache and recomputes.
+    Gated on any authenticated session (no special entitlement) — anonymous
+    callers get 401 and the page never renders the tab for them."""
     if current_user(request) is None:
         return JSONResponse({"error": "members-only", "locked": True}, status_code=401)
     account = max(1_000.0, min(account, 1e12))
     risk = max(0.0001, min(risk, 0.05))
-    lo = max(0.0, min(min_bps, 1e6)) if min_bps is not None else None
-    hi = max(0.0, min(max_bps, 1e6)) if max_bps is not None else None
     return JSONResponse(futures_overview.build_strategy_signals(
-        account=account, risk=risk, use_trend=bool(trend),
-        min_bps=lo, max_bps=hi, force=bool(force)))
+        account=account, risk=risk, use_trend=bool(trend), force=bool(force)))
 
 
 @router.get("/futures/api/strategy/charts")
-async def futures_overview_strategy_charts(request: Request, ids: str = ""):
-    """Members-only: chart payloads for the strategy instruments on screen.
+async def futures_overview_strategy_charts(request: Request, ids: str = "", trend: bool = False):
+    """Members-only: Donchian chart payloads for the selected strategy rows.
 
     ``ids`` is a comma-separated list of instrument ids (``SYM`` for an outright,
-    ``SYM|SP`` for its calendar spread). Capped per request so a crafted URL
-    can't trigger an unbounded compute."""
+    ``SYM|SP`` for its calendar spread); ``trend`` selects the same variant the
+    table is showing. Capped per request so a crafted URL can't trigger an
+    unbounded compute."""
     if current_user(request) is None:
         return JSONResponse({"error": "members-only", "locked": True}, status_code=401)
     id_list = [s.strip() for s in ids.split(",") if s.strip()][:80]
-    return JSONResponse(futures_overview.build_strategy_charts(id_list))
+    return JSONResponse(futures_overview.build_strategy_charts(id_list, use_trend=bool(trend)))
 
 
 # ── Asset-class landing + strategy pages (data-driven; declared LAST) ─────────

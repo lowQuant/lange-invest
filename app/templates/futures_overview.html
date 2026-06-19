@@ -421,12 +421,6 @@
                 <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
                 <span class="sim-suffix">%</span></span>
         </label>
-        <label class="strat-ctl">
-            <span class="ac-lbl">Max daily $ <span class="ac-lbl-note">optional</span></span>
-            <span class="strat-ctl-field">
-                <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
-                <span class="sim-suffix">bps</span></span>
-        </label>
         <label class="strat-switch" title="Optional 200-day SMA trend gate. Backtests showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
             <input type="checkbox" id="strat-trend">
             <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
@@ -435,19 +429,6 @@
         <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
             <i class="bi bi-arrow-repeat"></i> Recompute
         </button>
-        <div class="strat-chip-filters">
-            <span class="ac-lbl">Show</span>
-            <div class="fov-chip-group" id="strat-kind-chips">
-                <button class="fov-chip active" data-kind="all">All</button>
-                <button class="fov-chip" data-kind="outright">Single</button>
-                <button class="fov-chip" data-kind="spread">Synthetic</button>
-            </div>
-            <div class="fov-chip-group" id="strat-status-chips">
-                <button class="fov-chip active" data-status="all">All</button>
-                <button class="fov-chip" data-status="book">In the book</button>
-                <button class="fov-chip" data-status="aside">Stood aside</button>
-            </div>
-        </div>
     </div>
 
     <div class="qt-panel mb-3" id="strat-summary-panel" style="display:none;">
@@ -455,9 +436,26 @@
     </div>
 
     <div class="qt-panel">
-        <div class="qt-panel-head">
+        <div class="qt-panel-head strat-table-head">
             <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Live signals</span>
-            <span class="label-mono" id="strat-totals" style="color:var(--ink-3);"></span>
+            <div class="strat-head-controls">
+                <div class="strat-seg" id="strat-kind-seg" role="tablist">
+                    <button class="strat-seg-btn active" data-kind="all">All</button>
+                    <button class="strat-seg-btn" data-kind="outright">Single</button>
+                    <button class="strat-seg-btn" data-kind="spread">Synthetic</button>
+                </div>
+                <label class="strat-switch strat-switch-sm" title="Show only signals whose last closed trade lost (or never traded) — the ones the loser filter arms.">
+                    <input type="checkbox" id="strat-priorloser">
+                    <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
+                    <span class="ac-lbl">Prior trade lost</span>
+                </label>
+                <label class="strat-switch strat-switch-sm" title="Hide instruments too large to size one contract within the risk budget — i.e. one contract's daily move exceeds risk × account.">
+                    <input type="checkbox" id="strat-excludelarge">
+                    <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
+                    <span class="ac-lbl">Exclude large</span>
+                </label>
+                <span class="label-mono" id="strat-totals" style="color:var(--ink-3);"></span>
+            </div>
         </div>
         <div class="qt-panel-body dense" style="padding:0;">
             <div class="table-scroll">
@@ -490,15 +488,18 @@
         </div>
     </div>
 
-    {# ── Charts of the markets in the book (outright curve / spread series) ── #}
+    {# ── Charts for SELECTED rows only — Donchian channels + win/loss shading ── #}
     <div class="qt-panel mt-3" id="strat-charts-panel" style="display:none;">
         <div class="qt-panel-head">
-            <span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Signal charts</span>
-            <span class="label-mono" style="color:var(--ink-4);">back-adj close · EMA(50), EMA(100) · spreads show the c1−c2 series</span>
+            <span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Selected charts</span>
+            <span class="label-mono" style="color:var(--ink-4);">Donchian 50/20 channels · green = winning trade, red = losing · <a href="#" onclick="clearStratSelection();return false;" style="color:var(--signature);text-decoration:none;">clear</a></span>
         </div>
         <div class="qt-panel-body">
             <div class="fov-grid" id="strat-charts-grid"></div>
         </div>
+    </div>
+    <div class="strat-charts-hint label-mono" id="strat-charts-hint">
+        <i class="bi bi-hand-index"></i> Click a row to chart it with the Donchian channels — select several to compare.
     </div>
 {% else %}
     {# Guest teaser: show what's behind the wall so there's a reason to ask. #}
@@ -844,11 +845,34 @@
         color: var(--ink-1); padding: .35rem 0;
     }
     .strat-controls .strat-switch { align-self: center; }
-    .strat-chip-filters {
-        display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
-        width: 100%; margin-top: .2rem; padding-top: .7rem;
-        border-top: 1px solid var(--line-1);
+
+    /* Table-header filter controls (segmented kind switch + small toggles) */
+    .strat-table-head { flex-wrap: wrap; gap: .6rem 1rem; }
+    .strat-head-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1rem; }
+    .strat-seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 999px; overflow: hidden; }
+    .strat-seg-btn {
+        background: transparent; border: 0; padding: .22rem .7rem; cursor: pointer; color: var(--ink-3);
+        font-family: var(--mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .08em;
+        transition: color .12s, background .12s;
     }
+    .strat-seg-btn + .strat-seg-btn { border-left: 1px solid var(--line-2); }
+    .strat-seg-btn:hover { color: var(--ink-1); }
+    .strat-seg-btn.active { color: var(--paper); background: var(--ink-1); }
+    .strat-switch-sm .strat-switch-track { width: 30px; height: 16px; }
+    .strat-switch-sm .strat-switch-thumb { width: 12px; height: 12px; }
+    .strat-switch-sm input:checked + .strat-switch-track .strat-switch-thumb { transform: translateX(14px); }
+
+    /* Clickable signal rows + selection highlight */
+    .strat-table tbody tr.strat-row { cursor: pointer; }
+    .strat-table tbody tr.strat-row:hover { background: var(--bg-2); }
+    .strat-table tbody tr.strat-row.strat-selected {
+        background: var(--signature-dim); box-shadow: inset 3px 0 0 0 var(--signature);
+    }
+    .strat-charts-hint {
+        color: var(--ink-4); padding: .9rem 1rem; margin-top: .75rem; text-align: center;
+        border: 1px dashed var(--line-2); border-radius: var(--radius);
+    }
+    .strat-charts-hint .bi { color: var(--signature); }
 
     /* Grouped signal table: section + sub-group header rows */
     .strat-grp td {
@@ -1807,21 +1831,19 @@
     // ── Strategy tab (members-only): Donchian + loser-filter ──
     let stratData = null;          // last computed payload
     let stratInflight = null;
-    let stratKey = "";             // account|risk the loaded data was sized for
-    const stratFilters = { kind: "all", status: "all" };  // client-side table filters
+    let stratKey = "";             // account|risk|trend the loaded data was sized for
+    const stratFilters = { kind: "all", priorLoser: false, excludeLarge: false };  // client-side table filters
+    const stratSelected = new Set();   // instrument ids the user clicked to chart
 
     function readStratInputs() {
         const eqEl = document.getElementById("strat-equity");
         const rkEl = document.getElementById("strat-risk");
         if (!eqEl || !rkEl) return null;
         const trendEl = document.getElementById("strat-trend");
-        const maxbpsEl = document.getElementById("strat-maxbps");
-        const maxbps = maxbpsEl ? parseFloat(maxbpsEl.value) : NaN;
         return {
             equity: parseMoney(eqEl.value),
             risk: parseFloat(rkEl.value) / 100,
             trend: !!(trendEl && trendEl.checked),
-            maxBps: isFinite(maxbps) && maxbps > 0 ? maxbps : null,
         };
     }
     function sigBadge(side) {
@@ -1838,7 +1860,6 @@
         const s = stratData && stratData.summary;
         const panel = document.getElementById("strat-summary-panel");
         const box = document.getElementById("strat-summary");
-        const totals = document.getElementById("strat-totals");
         if (!s || !box) { if (panel) panel.style.display = "none"; return; }
         const acct = s.account || 0;
         const pct = v => acct > 0 ? ` <span class="label-mono" style="color:var(--ink-4);">${(100*v/acct).toFixed(0)}%</span>` : "";
@@ -1854,23 +1875,17 @@
              <div class="strat-stat"><span class="v">${fmtMoney(s.gross_total)}${pct(s.gross_total)}</span><span class="l">gross total</span></div>
              <div class="strat-stat"><span class="v">${fmtMoney(s.margin_est)}${pct(s.margin_est)}</span><span class="l">est. margin 10%</span></div>`;
         panel.style.display = "";
-        if (totals) {
-            const parts = [`${s.n_signals} signal${s.n_signals === 1 ? "" : "s"}`, `${s.n_sized} in the book`];
-            if (s.n_filtered > 0) parts.push(`${s.n_filtered} hidden by bps`);
-            if (s.n_universe != null) parts.push(`${s.n_universe} in universe`);
-            totals.textContent = parts.join(" · ");
-        }
     }
     function stratRowHtml(p) {
         const kindTag = p.kind === "spread"
             ? ' <span class="strat-kind" title="c1−c2 calendar spread as a standalone instrument">c1−c2</span>' : "";
-        const qty = p.in_book
-            ? (p.contracts > 0 ? fmtInt(p.contracts) : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>')
-            : '<span class="label-mono" style="color:var(--ink-4);">—</span>';
-        const moveTxt = p.avg_dollar_move != null
-            ? `${fmtMoney(p.avg_dollar_move)}${p.bps != null ? ` <span class="label-mono" style="color:var(--ink-4);">${p.bps.toFixed(1)}bps</span>` : ""}`
-            : "—";
-        return `<tr class="${p.in_book ? "" : "strat-row-aside"}">
+        const qty = p.contracts > 0 ? fmtInt(p.contracts)
+                  : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>';
+        const moveTxt = p.avg_dollar_move != null ? fmtMoney(p.avg_dollar_move) : "—";
+        const cls = ["strat-row"];
+        if (!p.in_book) cls.push("strat-row-aside");
+        if (stratSelected.has(p.id)) cls.push("strat-selected");
+        return `<tr class="${cls.join(" ")}" data-id="${p.id}">
             <td class="fov-sym">${p.symbol}${kindTag}</td>
             <td>${p.name}</td>
             <td><span class="fov-chip-pill">${p.sector}</span></td>
@@ -1882,22 +1897,18 @@
             <td class="text-end">${fmt4g(p.point_value)}</td>
             <td class="text-end">${moveTxt}</td>
             <td class="text-end">${qty}</td>
-            <td class="text-end">${p.in_book && p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
+            <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
         </tr>`;
     }
     function grpHeader(title, n) {
         return `<tr class="strat-grp"><td colspan="12">${title}<span class="strat-grp-n">${n} signal${n === 1 ? "" : "s"}</span></td></tr>`;
     }
-    function subHeader(title) {
-        return `<tr class="strat-subgrp"><td colspan="12">${title}</td></tr>`;
-    }
     function filteredStratRows() {
         const pos = (stratData && stratData.positions) || [];
         return pos.filter(p =>
             (stratFilters.kind === "all" || p.kind === stratFilters.kind) &&
-            (stratFilters.status === "all"
-              || (stratFilters.status === "book" && p.in_book)
-              || (stratFilters.status === "aside" && !p.in_book)));
+            (!stratFilters.priorLoser || p.last_result === -1) &&
+            (!stratFilters.excludeLarge || !p.too_large));
     }
     function renderStrategy() {
         const tbody = document.getElementById("strat-tbody");
@@ -1915,41 +1926,41 @@
             if (src) bits.push(`<span class="strat-source"><span class="dot">●</span> ${src}</span>`);
             asof.innerHTML = bits.join(" · ");
         }
+        const totals = document.getElementById("strat-totals");
         if (stratData.error) {
             tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
             const sp = document.getElementById("strat-summary-panel"); if (sp) sp.style.display = "none";
-            const tt = document.getElementById("strat-totals"); if (tt) tt.textContent = "";
-            mountStratCharts([]);
+            if (totals) totals.textContent = "";
+            renderSelectedCharts();
             return;
         }
         const rows = filteredStratRows();
         if (!rows.length) {
-            const s = stratData.summary || {};
-            const msg = (s.n_filtered > 0)
-                ? `No signals match — ${s.n_filtered} hidden by the bps filter. Widen “Max daily $”.`
-                : "No live signals match the current filters.";
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${msg}</td></tr>`;
-        } else {
-            // Two-level grouping: single vs synthetic, then armed (last trade
-            // lost/none → in the book) vs stood-aside (last trade won).
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">No live signals match the current filters.</td></tr>`;
+        } else if (stratFilters.kind === "all") {
+            // Group by kind (single vs synthetic) only when showing both — the
+            // segmented switch already labels a single-kind view.
             let html = "";
             [["outright", "Single contracts"], ["spread", "Synthetic · calendar spreads"]].forEach(([k, label]) => {
                 const kr = rows.filter(p => p.kind === k);
                 if (!kr.length) return;
-                html += grpHeader(label, kr.length);
-                const book = kr.filter(p => p.in_book);
-                const aside = kr.filter(p => !p.in_book);
-                if (book.length)  { html += subHeader("In the book — last trade lost / none (armed)"); html += book.map(stratRowHtml).join(""); }
-                if (aside.length) { html += subHeader("Stood aside — last trade won (loser filter holds fire)"); html += aside.map(stratRowHtml).join(""); }
+                html += grpHeader(label, kr.length) + kr.map(stratRowHtml).join("");
             });
             tbody.innerHTML = html;
+        } else {
+            tbody.innerHTML = rows.map(stratRowHtml).join("");
+        }
+        if (totals) {
+            const s = stratData.summary || {};
+            const parts = [`${rows.length} shown`, `${s.n_signals} signal${s.n_signals === 1 ? "" : "s"}`];
+            if (s.n_universe != null) parts.push(`${s.n_universe} in universe`);
+            totals.textContent = parts.join(" · ");
         }
         renderStratSummary();
-        mountStratCharts(rows);
+        renderSelectedCharts();
     }
 
-    // ── Strategy signal charts (markets currently in the book) ──
-    let stratChartsInflight = null;
+    // ── Strategy charts: ONLY the rows a member has selected (click to toggle) ──
     function destroyStratCharts() {
         const toKill = [];
         charts.forEach((c, id) => { if (id.startsWith("strat-chart-")) toKill.push(id); });
@@ -1960,21 +1971,42 @@
         }
     }
     function chartDomId(iid) { return "strat-chart-" + iid.replace(/[^A-Za-z0-9_-]/g, "_"); }
-    function mountStratCharts(pos) {
+    window.clearStratSelection = function () {
+        stratSelected.clear();
+        document.querySelectorAll("#strat-tbody tr.strat-selected").forEach(tr => tr.classList.remove("strat-selected"));
+        renderSelectedCharts();
+    };
+    function toggleStratRow(id, tr) {
+        if (stratSelected.has(id)) { stratSelected.delete(id); if (tr) tr.classList.remove("strat-selected"); }
+        else { stratSelected.add(id); if (tr) tr.classList.add("strat-selected"); }
+        renderSelectedCharts();
+    }
+    // Delegate row clicks (rows are re-rendered on every filter change).
+    const stratTbodyEl = document.getElementById("strat-tbody");
+    if (stratTbodyEl) stratTbodyEl.addEventListener("click", (ev) => {
+        const tr = ev.target.closest("tr.strat-row");
+        if (tr && tr.dataset.id) toggleStratRow(tr.dataset.id, tr);
+    });
+    function renderSelectedCharts() {
         const grid = document.getElementById("strat-charts-grid");
         const panel = document.getElementById("strat-charts-panel");
+        const hint = document.getElementById("strat-charts-hint");
         if (!grid || !panel) return;
         destroyStratCharts();
-        // Chart every signal currently shown (in-book + stood-aside), capped so
-        // a big list doesn't flood the grid. In-book first.
-        const shown = pos.slice(0, 24);
-        if (!shown.length) { panel.style.display = "none"; grid.innerHTML = ""; return; }
-        grid.innerHTML = shown.map(p => {
+        // Chart selected rows that are currently visible under the filters.
+        const byId = {};
+        filteredStratRows().forEach(p => { byId[p.id] = p; });
+        const sel = Array.from(stratSelected).map(id => byId[id]).filter(Boolean);
+        if (!sel.length) {
+            panel.style.display = "none"; grid.innerHTML = "";
+            if (hint) hint.style.display = "";
+            return;
+        }
+        if (hint) hint.style.display = "none";
+        grid.innerHTML = sel.map(p => {
             const sideCls = p.side === 1 ? "long" : "short";
             const sideTxt = p.side === 1 ? "LONG" : "SHORT";
-            const tag = p.in_book
-                ? (p.contracts > 0 ? `${sideTxt} &times;${fmtInt(p.contracts)}` : `${sideTxt} &lt;1`)
-                : `${sideTxt} · aside`;
+            const tag = p.contracts > 0 ? `${sideTxt} &times;${fmtInt(p.contracts)}` : `${sideTxt} &lt;1`;
             const kindTag = p.kind === "spread" ? ' <span class="strat-kind">c1−c2</span>' : "";
             return `<article class="fov-card${p.in_book ? "" : " strat-card-aside"}">
                 <header class="fov-card-head">
@@ -1984,7 +2016,7 @@
                 </header>
                 <div class="fov-card-meta">
                     ${p.sector ? `<span>${p.sector}</span>` : ""}
-                    <span>ATR ${fmt4g(p.atr)}</span>
+                    <span>last trade ${p.last_result === 1 ? "won" : p.last_result === -1 ? "lost" : "none"}</span>
                     <span class="num">last <strong>${fmt4g(p.last)}</strong></span>
                 </div>
                 <div class="fov-canvas-wrap">
@@ -1995,12 +2027,12 @@
             </article>`;
         }).join("");
         panel.style.display = "";
-        loadStratCharts(shown.map(p => p.id));
+        loadStratCharts(sel.map(p => p.id));
     }
     function loadStratCharts(ids) {
         if (!ids.length) return;
-        const qs = encodeURIComponent(ids.join(","));
-        if (stratChartsInflight) stratChartsInflight = null;  // supersede
+        const trend = !!(document.getElementById("strat-trend") || {}).checked;
+        const qs = encodeURIComponent(ids.join(",")) + `&trend=${trend}`;
         fetch(`/futures/api/strategy/charts?ids=${qs}`, { headers: { "Accept": "application/json" } })
             .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
             .then(data => {
@@ -2016,7 +2048,7 @@
                         const skel = card && card.querySelector(".fov-skeleton");
                         if (skel) skel.style.display = "none";
                         canvas.style.display = "";
-                        const ch = LangeChart.render(domId, entry.chart, { isMain: entry.kind !== "spread" });
+                        const ch = LangeChart.render(domId, entry.chart, { isMain: true });
                         if (ch) charts.set(domId, ch);
                     });
                 };
@@ -2032,13 +2064,12 @@
             renderStrategy();
             return;
         }
-        const key = Math.round(inp.equity) + "|" + inp.risk + "|" + (inp.trend ? "T" : "F") + "|" + (inp.maxBps || "");
+        const key = Math.round(inp.equity) + "|" + inp.risk + "|" + (inp.trend ? "T" : "F");
         if (!force && stratData && stratKey === key) return;   // already current
         if (stratInflight) return;
         const tbody = document.getElementById("strat-tbody");
-        if (tbody) tbody.innerHTML = '<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;"><span class="spinner-border spinner-border-sm"></span> Computing signals…</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;"><span class="spinner-border spinner-border-sm"></span> Computing signals…</td></tr>';
         let qs = `account=${encodeURIComponent(inp.equity)}&risk=${encodeURIComponent(inp.risk)}&trend=${inp.trend}`;
-        if (inp.maxBps != null) qs += `&max_bps=${encodeURIComponent(inp.maxBps)}`;
         if (force) qs += "&force=true";
         stratInflight = fetch(`/futures/api/strategy?${qs}`, { headers: { "Accept": "application/json" } })
             .then(r => {
@@ -2050,9 +2081,9 @@
             .catch(err => { stratData = { error: "Could not compute signals: " + err.message }; renderStrategy(); })
             .finally(() => { stratInflight = null; });
     };
-    // Re-pick/re-size from the cached universe on input changes (force=false);
-    // only the explicit "Recompute" button rebuilds the universe (force=true).
-    ["strat-equity", "strat-risk", "strat-trend", "strat-maxbps"].forEach(id => {
+    // Account / risk / trend change → re-pick & re-size from the cached universe
+    // (force=false). Only "Recompute" rebuilds the universe (force=true).
+    ["strat-equity", "strat-risk", "strat-trend"].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("change", () => { updateStratToolbarSummary(); loadStrategy(false); });
     });
@@ -2062,19 +2093,17 @@
         if (isFinite(n) && n > 0) stratEq.value = Math.round(n).toLocaleString("en-US");
         updateStratToolbarSummary();
     });
-    // Kind / status chips filter the already-loaded table client-side (no fetch).
-    document.querySelectorAll("#strat-kind-chips .fov-chip").forEach(b => {
+    // Header filters re-render the loaded table client-side (no fetch).
+    document.querySelectorAll("#strat-kind-seg .strat-seg-btn").forEach(b => {
         b.addEventListener("click", () => {
-            document.querySelectorAll("#strat-kind-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            document.querySelectorAll("#strat-kind-seg .strat-seg-btn").forEach(x => x.classList.remove("active"));
             b.classList.add("active"); stratFilters.kind = b.dataset.kind; renderStrategy();
         });
     });
-    document.querySelectorAll("#strat-status-chips .fov-chip").forEach(b => {
-        b.addEventListener("click", () => {
-            document.querySelectorAll("#strat-status-chips .fov-chip").forEach(x => x.classList.remove("active"));
-            b.classList.add("active"); stratFilters.status = b.dataset.status; renderStrategy();
-        });
-    });
+    const priorEl = document.getElementById("strat-priorloser");
+    if (priorEl) priorEl.addEventListener("change", () => { stratFilters.priorLoser = priorEl.checked; renderStrategy(); });
+    const largeEl = document.getElementById("strat-excludelarge");
+    if (largeEl) largeEl.addEventListener("change", () => { stratFilters.excludeLarge = largeEl.checked; renderStrategy(); });
 
     // ── Collapsible sizing/filter menu + method notes ──
     window.toggleStratControls = function () {
@@ -2103,7 +2132,6 @@
         if (isFinite(inp.equity) && inp.equity > 0) bits.push("$" + Math.round(inp.equity).toLocaleString("en-US"));
         if (isFinite(inp.risk) && inp.risk > 0) bits.push((inp.risk * 100).toFixed(2) + "% risk");
         bits.push(inp.trend ? "trend on" : "trend off");
-        if (inp.maxBps != null) bits.push("≤" + inp.maxBps + "bps");
         el.textContent = bits.length ? "· " + bits.join(" · ") : "";
     }
     updateStratToolbarSummary();

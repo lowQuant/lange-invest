@@ -50,6 +50,9 @@ _UNI_CACHE: dict[str, Any] = {}
 _STRAT_UNIVERSE_CACHE: dict[str, Any] = {}
 # c1−c2 spread chart payloads, built lazily for the markets actually displayed.
 _STRAT_SPREAD_CHART_CACHE: dict[str, dict[str, Any] | None] = {}
+# Donchian strategy charts (close + channels + win/loss trade shading), keyed by
+# "id|variant" and built lazily only for the rows a member selects.
+_STRAT_DONCHIAN_CACHE: dict[str, dict[str, Any] | None] = {}
 
 # TTL so direct-to-ArcticDB writes (scripts, other processes) surface without a
 # web-process restart. Writes through this app's /mcp endpoint invalidate
@@ -109,6 +112,7 @@ def invalidate_cache() -> None:
     _UNI_CACHE.clear()
     _STRAT_UNIVERSE_CACHE.clear()
     _STRAT_SPREAD_CHART_CACHE.clear()
+    _STRAT_DONCHIAN_CACHE.clear()
     _cache_filled_at = None
 
 
@@ -817,22 +821,76 @@ def _spread_record(sym: str, meta: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def _spread_chart(sym: str) -> dict[str, Any] | None:
-    """LangeChart line spec for a market's c1−c2 spread (built/cached lazily)."""
-    if sym in _STRAT_SPREAD_CHART_CACHE:
-        return _STRAT_SPREAD_CHART_CACHE[sym]
-    spread = _spread_series(sym)
-    chart = None
-    if not spread.empty:
-        s = spread.tail(1000)
-        chart = {
-            "title": f"{sym} · c1−c2 spread", "chart_type": "line", "x_label": "Date",
-            "x_values": [d.date().isoformat() for d in s.index],
-            "datasets": [{"label": "c1−c2", "data": [float(v) for v in s.to_numpy()]}],
-        }
-    _STRAT_SPREAD_CHART_CACHE[sym] = chart
-    _mark_filled()
-    return chart
+# Bars shown on a strategy (Donchian) chart — enough to see recent trades and
+# the channels without shipping the whole history to the browser.
+STRAT_CHART_BARS = 500
+
+
+def _donchian_trades(close: np.ndarray, target: np.ndarray) -> list[dict[str, Any]]:
+    """Breakout trades implied by a raw Donchian target: entry→exit spans with a
+    win/loss flag. Drives the green/red shading on the strategy chart so a member
+    can see at a glance whether each instrument's recent trades won or lost (the
+    input to the loser filter)."""
+    trades: list[dict[str, Any]] = []
+    pos, start = 0, -1
+    for i in range(len(target)):
+        t = int(target[i])
+        if t != pos:
+            if pos != 0 and start >= 0:
+                trades.append({"start": start, "end": i,
+                               "win": bool(pos * (close[i] - close[start]) > 0)})
+            pos, start = (t, i) if t != 0 else (0, -1)
+    if pos != 0 and start >= 0:  # trade still open on the last bar
+        i = len(close) - 1
+        trades.append({"start": start, "end": i,
+                       "win": bool(pos * (close[i] - close[start]) > 0)})
+    return trades
+
+
+def _donchian_chart(series: pd.Series, label: str, use_trend: bool) -> dict[str, Any] | None:
+    """LangeChart spec for one instrument: the series, its Donchian entry (50) and
+    exit (20) channels, the optional 200-day SMA, and win/loss trade shading."""
+    if len(series) < STRAT_ENTRY + STRAT_EXIT:
+        return None
+    close = series.to_numpy(dtype=float)
+    target = _strategy_signal(series, use_trend=use_trend)
+    trades = _donchian_trades(close, target)
+
+    hi_e = series.rolling(STRAT_ENTRY).max().to_numpy()
+    lo_e = series.rolling(STRAT_ENTRY).min().to_numpy()
+    hi_x = series.rolling(STRAT_EXIT).max().to_numpy()
+    lo_x = series.rolling(STRAT_EXIT).min().to_numpy()
+    sma = series.rolling(STRAT_SMA).mean().to_numpy() if use_trend else None
+
+    off = max(0, len(series) - STRAT_CHART_BARS)
+
+    def col(a: np.ndarray) -> list[float | None]:
+        return [None if v != v else float(v) for v in a[off:]]
+
+    # Re-base trade indices into the visible window; drop trades that ended before
+    # it and clip an entry that began before the window starts.
+    vis_trades = []
+    for tr in trades:
+        if tr["end"] < off:
+            continue
+        vis_trades.append({"start": max(tr["start"] - off, 0), "end": tr["end"] - off, "win": tr["win"]})
+
+    datasets: list[dict[str, Any]] = [
+        {"label": label, "data": col(close)},
+        {"label": "50-day high", "data": col(hi_e), "is_donchian": True},
+        {"label": "50-day low", "data": col(lo_e), "is_donchian": True},
+        {"label": "20-day exit high", "data": col(hi_x), "is_donchian": True},
+        {"label": "20-day exit low", "data": col(lo_x), "is_donchian": True},
+    ]
+    if sma is not None:
+        datasets.append({"label": "SMA(200)", "data": col(sma), "is_study": True})
+    datasets.append({"label": "trades", "is_donchian_trades": True, "trades": vis_trades})
+
+    return {
+        "title": label, "chart_type": "line", "x_label": "Date",
+        "x_values": [d.date().isoformat() for d in series.index[off:]],
+        "datasets": datasets,
+    }
 
 
 # ── Full combined universe: compute, fingerprint, persistent cache ────────────
@@ -920,37 +978,48 @@ def _strategy_universe(force: bool = False) -> dict[str, Any] | None:
     return payload
 
 
-def build_strategy_charts(ids: list[str]) -> dict[str, Any]:
-    """Chart payloads for the displayed instruments, built lazily by id.
+def build_strategy_charts(ids: list[str], use_trend: bool = False) -> dict[str, Any]:
+    """Strategy (Donchian) chart payloads for the selected instruments, by id.
 
     ``id`` is the symbol for an outright and ``SYM|SP`` for its calendar spread.
-    Outright curves reuse the gallery's back-adjusted payload; spreads build a
-    line of their roll-adjusted series. Only the markets actually on screen are
-    requested, so this stays bounded even over the full library.
+    Each chart carries the instrument's series, its 50/20 Donchian channels, the
+    optional 200-day SMA (when the trend gate is on), and green/red shading for
+    each historical breakout trade. Built lazily and cached per ``id|variant`` —
+    only the rows a member has selected are ever requested.
     """
     _expire_stale()
     if not ensure_connected():
         return {}
     uni = _read_universe_futures()
+    variant = "trend" if use_trend else "notrend"
     out: dict[str, Any] = {}
     for iid in ids:
-        if iid.endswith("|SP"):
-            sym, kind = iid[:-3], "spread"
-            chart = _spread_chart(sym)
+        ckey = f"{iid}|{variant}"
+        if ckey in _STRAT_DONCHIAN_CACHE:
+            chart = _STRAT_DONCHIAN_CACHE[ckey]
         else:
-            sym, kind = iid, "outright"
-            entry = _payload_entry_for(sym, uni)
-            chart = entry.get("curve_chart") if entry else None
+            if iid.endswith("|SP"):
+                sym, kind = iid[:-3], "spread"
+                series = _spread_series(sym)
+                label = f"{sym} · c1−c2 spread"
+            else:
+                sym, kind = iid, "outright"
+                entry = _payload_entry_for(sym, uni)
+                series = _close_series_from_entry(entry) if entry else pd.Series(dtype=float)
+                label = f"{sym} · back-adjusted close"
+            chart = _donchian_chart(series, label, use_trend) if len(series) else None
+            _STRAT_DONCHIAN_CACHE[ckey] = chart
+            _mark_filled()
         if chart:
-            out[iid] = {"id": iid, "sym": sym, "kind": kind, "chart": chart}
+            kind = "spread" if iid.endswith("|SP") else "outright"
+            out[iid] = {"id": iid, "sym": iid[:-3] if iid.endswith("|SP") else iid,
+                        "kind": kind, "chart": chart}
     return out
 
 
 def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
                            risk: float = STRAT_RISK_DEFAULT,
                            use_trend: bool = False,
-                           min_bps: float | None = None,
-                           max_bps: float | None = None,
                            force: bool = False) -> dict[str, Any]:
     """All live signals of the Donchian + loser-filter strategy, classified.
 
@@ -969,11 +1038,12 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
         is armed and held (``in_book`` True). This is the "previous was a
         loser / winner" split.
 
-    Only the in-book rows are *sized* (with the per-position 1× / per-side 2× /
-    total 4× caps); stood-aside rows carry the signal and its avg daily $ move
-    but no contracts. ``use_trend`` toggles the optional 200-day SMA gate
-    (default off). ``min_bps`` / ``max_bps`` filter every row by its average
-    daily $ move as bps of the account (the universe is always computed in full).
+    In-book rows are sized with the per-position 1× / per-side 2× / total 4×
+    caps; stood-aside rows still get an *indicative* per-position quantity so the
+    contract count on every row scales with the account. Each row also carries a
+    ``too_large`` flag — one contract's avg daily move exceeds the per-position
+    risk budget (``risk × account``) — which the UI's "exclude large" toggle
+    uses. ``use_trend`` toggles the optional 200-day SMA gate (default off).
     Returns ``{positions, summary, as_of, source, computed_at, error}``.
     """
     _expire_stale()
@@ -998,7 +1068,10 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
         if raw_dir == 0 and in_dir == 0:
             continue  # genuinely flat — not a signal
         move = r.get("avg_dollar_move")
-        bps = (move / account * 1e4) if (move and account > 0) else None
+        # "Too large" = one contract's avg daily move already exceeds the
+        # per-position risk budget (risk × account), i.e. it can't be sized to
+        # one contract within the risk factor the member set.
+        too_large = bool(move is not None and account > 0 and move > risk * account)
         rows.append({
             "id": r["id"], "symbol": r["sym"], "name": r["name"], "sector": r["sector"],
             "is_micro": r["is_micro"], "kind": r["kind"],
@@ -1008,24 +1081,9 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
             "last_result": int(st.get("last_result", 0)),
             "entry_px": st.get("entry_px"), "entry_date": st.get("entry_date"),
             "last": r["last"], "atr": r["atr"], "point_value": r["mult"],
-            "avg_dollar_move": move, "bps": bps, "firings": r.get("firings"),
+            "avg_dollar_move": move, "too_large": too_large, "firings": r.get("firings"),
             "contracts": 0, "notional": 0.0, "daily_risk": 0.0, "stop": None,
         })
-
-    # bps band — display/selection filter only; the universe above is full.
-    n_signals = len(rows)
-    if min_bps is not None or max_bps is not None:
-        def _in_band(a: dict[str, Any]) -> bool:
-            b = a["bps"]
-            if b is None:
-                return False
-            if min_bps is not None and b < min_bps:
-                return False
-            if max_bps is not None and b > max_bps:
-                return False
-            return True
-        rows = [a for a in rows if _in_band(a)]
-    n_filtered = n_signals - len(rows)
 
     # Size the actual book (in-book rows) oldest-entry-first so the per-side /
     # total caps fill in trade order. Stood-aside rows are left un-sized.
@@ -1063,6 +1121,25 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
                 p["stop"] = (p["entry_px"] - STRAT_STOP_ATR * atr) if d > 0 \
                     else (p["entry_px"] + STRAT_STOP_ATR * atr)
 
+    # Stood-aside rows aren't in the book, but still show what they'd size to at
+    # this account — an indicative per-position quantity (per-position 1× cap
+    # only, no side/total caps), so every row's contract count scales with the
+    # portfolio size the member entered.
+    for p in rows:
+        if p["in_book"]:
+            continue
+        atr, mult, last, d = p["atr"], p["point_value"], p["last"], p["side"]
+        if atr and mult and atr > 0 and mult > 0:
+            cands = [risk * account / (atr * mult)]
+            pc = abs(last) * mult if last is not None else 0.0
+            if pc > 0:
+                cands.append(STRAT_CAP_POS * account / pc)
+            n = int(math.floor(min(cands)))
+            if n >= 1:
+                p["contracts"] = n
+                p["notional"] = n * pc
+                p["daily_risk"] = n * atr * mult
+
     # Display order: single before synthetic, in-book before stood-aside, then
     # biggest notional / dollar move on top.
     rows.sort(key=lambda p: (
@@ -1074,7 +1151,7 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
 
     summary = {
         "account": account, "risk": risk, "use_trend": use_trend,
-        "n_signals": len(rows), "n_sized": n_sized, "n_filtered": n_filtered,
+        "n_signals": len(rows), "n_sized": n_sized,
         "n_long": n_long, "n_short": n_short,
         "n_single_book": _grp("outright", True), "n_single_aside": _grp("outright", False),
         "n_spread_book": _grp("spread", True), "n_spread_aside": _grp("spread", False),

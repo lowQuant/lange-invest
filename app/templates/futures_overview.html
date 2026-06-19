@@ -400,21 +400,37 @@
                         <span class="sim-suffix">%</span>
                     </div>
                 </label>
+                <label class="sim-input">
+                    <span class="ac-lbl">Max daily $ impact <span class="ac-lbl-note">per contract, optional</span></span>
+                    <div class="sim-input-field">
+                        <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
+                        <span class="sim-suffix">bps</span>
+                    </div>
+                </label>
+            </div>
+            <div class="sim-controls-row">
+                <label class="strat-switch" title="Toggle the optional 200-day SMA trend gate. The combined-universe backtest showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
+                    <input type="checkbox" id="strat-trend">
+                    <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
+                    <span class="ac-lbl">200-day trend filter</span>
+                </label>
                 <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
                     <i class="bi bi-arrow-repeat"></i> Recompute
                 </button>
             </div>
             <div class="sim-formula">
-                Entry on a fresh <strong>50-day</strong> high above the <strong>200-day</strong> SMA (long) or a
-                50-day low below it (short); exit on the opposite <strong>20-day</strong> channel.
+                Combined universe: every market's <strong>outright</strong> and its <strong>c1−c2 calendar
+                spread</strong> are independent instruments carrying the same signal (a spread joins only after
+                ≥10 historical firings). Entry on a fresh <strong>50-day</strong> high (long) or low (short);
+                exit on the opposite <strong>20-day</strong> channel. The optional <strong>200-day SMA</strong>
+                gate is <em>off by default</em> — backtests showed it adds nothing once the loser filter is on.
                 The <strong>loser filter</strong> only arms a market after its last closed trade <em>lost</em>
                 (or it never traded) — after a winner it stands aside, which is what cuts turnover and drawdown.
                 Sized <code>contracts = risk × equity / (ATR<sub>100</sub> × point value)</code>, capped at
-                1× / 2× / 4× of cash per position / side / total. A market too large or volatile to size
-                one contract outright is traded instead as its <strong>c1−c2 calendar spread</strong> — a
-                standalone series with a fraction of the notional, carrying <em>its own</em> 50/200/20
-                Donchian signal (no spread signal, no trade). Recomputed live from the back-adjusted
-                continuous curves — a direction check, not investment advice.
+                1× / 2× / 4× of cash per position / side / total. <strong>Avg daily $ move</strong> is
+                ATR<sub>100</sub> × point value; the <strong>bps</strong> filter narrows the book by that move
+                as a fraction of the account. The full signal universe is always computed — the filter only
+                changes what's shown. A direction check, not investment advice.
             </div>
         </div>
     </div>
@@ -439,20 +455,33 @@
                         <th class="text-end">Stop 3·ATR</th>
                         <th class="text-end">ATR(100)</th>
                         <th class="text-end">Pt&nbsp;value</th>
+                        <th class="text-end">Avg&nbsp;daily&nbsp;$<span class="strat-foot">†</span></th>
                         <th class="text-end">Contracts</th>
                         <th class="text-end">Notional</th>
                         <th class="text-end">Margin&nbsp;10%</th>
                     </tr>
                 </thead>
                 <tbody id="strat-tbody">
-                    <tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>
+                    <tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>
                 </tbody>
             </table>
             </div>
             <div class="strat-footnote label-mono">
                 <span class="strat-foot">*</span> entry &amp; stop are continuous (back-adjusted) levels — they match real
                 quotes within the current contract.
+                <span class="strat-foot">†</span> avg daily $ move = ATR(100) × point value (one contract's typical daily P&amp;L swing).
             </div>
+        </div>
+    </div>
+
+    {# ── Charts of the markets in the book (outright curve / spread series) ── #}
+    <div class="qt-panel mt-3" id="strat-charts-panel" style="display:none;">
+        <div class="qt-panel-head">
+            <span class="qt-panel-head-title"><i class="bi bi-graph-up"></i> Signal charts</span>
+            <span class="label-mono" style="color:var(--ink-4);">back-adj close · EMA(50), EMA(100) · spreads show the c1−c2 series</span>
+        </div>
+        <div class="qt-panel-body">
+            <div class="fov-grid" id="strat-charts-grid"></div>
         </div>
     </div>
 {% else %}
@@ -748,6 +777,26 @@
 
     /* Strategy panel */
     .strat-refresh { align-self: flex-end; white-space: nowrap; }
+    .sim-controls-row {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap; margin-top: .85rem;
+    }
+    /* Trend-filter toggle switch */
+    .strat-switch { display: inline-flex; align-items: center; gap: .55rem; cursor: pointer; user-select: none; }
+    .strat-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .strat-switch-track {
+        position: relative; width: 34px; height: 18px; border-radius: 999px;
+        background: var(--bg-3); border: 1px solid var(--line-2); transition: background .15s, border-color .15s;
+    }
+    .strat-switch-thumb {
+        position: absolute; top: 1px; left: 1px; width: 14px; height: 14px; border-radius: 50%;
+        background: var(--ink-3); transition: transform .15s, background .15s;
+    }
+    .strat-switch input:checked + .strat-switch-track { background: var(--signature-dim); border-color: var(--signature); }
+    .strat-switch input:checked + .strat-switch-track .strat-switch-thumb { transform: translateX(16px); background: var(--signature); }
+    .strat-switch input:focus-visible + .strat-switch-track { box-shadow: 0 0 0 2px var(--signature-dim); }
+    .strat-source { color: var(--ink-4); }
+    .strat-source .dot { color: var(--signature); }
     .strat-summary {
         display: flex; flex-wrap: wrap; gap: 1.1rem 1.75rem; padding: .85rem 1rem;
     }
@@ -909,7 +958,8 @@
         if (window._langeCharts) {
             window._langeCharts = window._langeCharts.filter(c =>
                 !c.canvas || !c.canvas.id ||
-                !(c.canvas.id.startsWith("chart-") || c.canvas.id.startsWith("sim-chart-")));
+                !(c.canvas.id.startsWith("chart-") || c.canvas.id.startsWith("sim-chart-")
+                  || c.canvas.id.startsWith("strat-chart-")));
         }
     }
     function destroySimCharts() {
@@ -1671,7 +1721,15 @@
         const eqEl = document.getElementById("strat-equity");
         const rkEl = document.getElementById("strat-risk");
         if (!eqEl || !rkEl) return null;
-        return { equity: parseMoney(eqEl.value), risk: parseFloat(rkEl.value) / 100 };
+        const trendEl = document.getElementById("strat-trend");
+        const maxbpsEl = document.getElementById("strat-maxbps");
+        const maxbps = maxbpsEl ? parseFloat(maxbpsEl.value) : NaN;
+        return {
+            equity: parseMoney(eqEl.value),
+            risk: parseFloat(rkEl.value) / 100,
+            trend: !!(trendEl && trendEl.checked),
+            maxBps: isFinite(maxbps) && maxbps > 0 ? maxbps : null,
+        };
     }
     function stratSideBadge(side) {
         return side === 1 ? '<span class="sim-side long">LONG</span>'
@@ -1699,34 +1757,53 @@
         panel.style.display = "";
         if (totals) {
             const skipped = (s.n_positions || 0) - (s.n_sized || 0);
-            totals.textContent = `${s.n_sized} sized${skipped > 0 ? ` · ${skipped} below 1 contract` : ""}`;
+            const parts = [`${s.n_sized} sized`];
+            if (skipped > 0) parts.push(`${skipped} below 1 contract`);
+            if (s.n_filtered > 0) parts.push(`${s.n_filtered} hidden by bps filter`);
+            if (s.n_universe != null) parts.push(`${s.n_universe} in universe`);
+            totals.textContent = parts.join(" · ");
         }
     }
     function renderStrategy() {
         const tbody = document.getElementById("strat-tbody");
         if (!tbody) return;
         if (!stratData) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>';
             return;
         }
         const asof = document.getElementById("strat-asof");
-        if (asof) asof.textContent = stratData.as_of ? `as of ${stratData.as_of}` : "";
+        if (asof) {
+            const src = stratData.source === "cache" ? "cached"
+                      : stratData.source === "computed" ? "recomputed" : "";
+            const bits = [];
+            if (stratData.as_of) bits.push(`as of ${stratData.as_of}`);
+            if (src) bits.push(`<span class="strat-source"><span class="dot">●</span> ${src}</span>`);
+            asof.innerHTML = bits.join(" · ");
+        }
         if (stratData.error) {
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
             const sp = document.getElementById("strat-summary-panel"); if (sp) sp.style.display = "none";
             const tt = document.getElementById("strat-totals"); if (tt) tt.textContent = "";
+            mountStratCharts([]);
             return;
         }
         const pos = stratData.positions || [];
         if (!pos.length) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">No markets are armed right now — every signal is flat or blocked by the loser filter (its last closed trade was a winner).</td></tr>';
+            const s = stratData.summary || {};
+            const msg = (s.n_filtered > 0)
+                ? `No markets pass the current bps filter — ${s.n_filtered} armed signal${s.n_filtered === 1 ? " was" : "s were"} hidden. Widen "Max daily $ impact" to see them.`
+                : "No markets are armed right now — every signal is flat or blocked by the loser filter (its last closed trade was a winner).";
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${msg}</td></tr>`;
         } else {
             tbody.innerHTML = pos.map(p => {
                 const kindTag = p.kind === "spread"
-                    ? ' <span class="strat-kind" title="Traded as the c1−c2 calendar spread (outright too large/volatile to size); signal computed on the spread series itself">c1−c2</span>'
+                    ? ' <span class="strat-kind" title="The c1−c2 calendar spread traded as a standalone instrument; signal computed on the spread series itself">c1−c2</span>'
                     : "";
                 const qty = p.contracts > 0 ? fmtInt(p.contracts)
                           : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>';
+                const moveTxt = p.avg_dollar_move != null
+                    ? `${fmtMoney(p.avg_dollar_move)}${p.bps != null ? ` <span class="label-mono" style="color:var(--ink-4);">${p.bps.toFixed(1)}bps</span>` : ""}`
+                    : "—";
                 return `<tr>
                     <td class="fov-sym">${p.symbol}${kindTag}</td>
                     <td>${p.name}</td>
@@ -1737,6 +1814,7 @@
                     <td class="text-end">${fmt4g(p.stop)}</td>
                     <td class="text-end">${fmt4g(p.atr)}</td>
                     <td class="text-end">${fmt4g(p.point_value)}</td>
+                    <td class="text-end">${moveTxt}</td>
                     <td class="text-end">${qty}</td>
                     <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
                     <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional * 0.10) : "—"}</td>
@@ -1744,6 +1822,81 @@
             }).join("");
         }
         renderStratSummary();
+        mountStratCharts(pos);
+    }
+
+    // ── Strategy signal charts (markets currently in the book) ──
+    let stratChartsInflight = null;
+    function destroyStratCharts() {
+        const toKill = [];
+        charts.forEach((c, id) => { if (id.startsWith("strat-chart-")) toKill.push(id); });
+        toKill.forEach(id => { try { charts.get(id).destroy(); } catch (e) {} charts.delete(id); });
+        if (window._langeCharts) {
+            window._langeCharts = window._langeCharts.filter(c =>
+                !c.canvas || !c.canvas.id || !c.canvas.id.startsWith("strat-chart-"));
+        }
+    }
+    function chartDomId(iid) { return "strat-chart-" + iid.replace(/[^A-Za-z0-9_-]/g, "_"); }
+    function mountStratCharts(pos) {
+        const grid = document.getElementById("strat-charts-grid");
+        const panel = document.getElementById("strat-charts-panel");
+        if (!grid || !panel) return;
+        destroyStratCharts();
+        // Only chart the markets we actually sized (≥1 contract) to keep the
+        // grid focused on the live book; cap so a huge book doesn't flood it.
+        const shown = pos.filter(p => p.contracts > 0).slice(0, 30);
+        if (!shown.length) { panel.style.display = "none"; grid.innerHTML = ""; return; }
+        grid.innerHTML = shown.map(p => {
+            const sideCls = p.side === 1 ? "long" : "short";
+            const sideTxt = p.side === 1 ? "LONG" : "SHORT";
+            const kindTag = p.kind === "spread" ? ' <span class="strat-kind">c1−c2</span>' : "";
+            return `<article class="fov-card">
+                <header class="fov-card-head">
+                    <div><span class="fov-card-sym">${p.symbol}${kindTag}</span>
+                         <span class="fov-card-name">${p.name}</span></div>
+                    <span class="sim-side ${sideCls}">${sideTxt} &times;${fmtInt(p.contracts)}</span>
+                </header>
+                <div class="fov-card-meta">
+                    ${p.sector ? `<span>${p.sector}</span>` : ""}
+                    <span>ATR ${fmt4g(p.atr)}</span>
+                    <span class="num">last <strong>${fmt4g(p.last)}</strong></span>
+                </div>
+                <div class="fov-canvas-wrap">
+                    <div class="fov-skeleton"><div class="spinner-border spinner-border-sm"></div>
+                        <span class="label-mono ms-2">loading…</span></div>
+                    <canvas id="${chartDomId(p.id)}" style="display:none;"></canvas>
+                </div>
+            </article>`;
+        }).join("");
+        panel.style.display = "";
+        loadStratCharts(shown.map(p => p.id));
+    }
+    function loadStratCharts(ids) {
+        if (!ids.length) return;
+        const qs = encodeURIComponent(ids.join(","));
+        if (stratChartsInflight) stratChartsInflight = null;  // supersede
+        fetch(`/futures/api/strategy/charts?ids=${qs}`, { headers: { "Accept": "application/json" } })
+            .then(r => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+            .then(data => {
+                const wait = () => {
+                    if (!window.Chart || !window.LangeChart) { setTimeout(wait, 50); return; }
+                    Object.keys(data).forEach(iid => {
+                        const entry = data[iid];
+                        if (!entry || !entry.chart) return;
+                        const domId = chartDomId(iid);
+                        const canvas = document.getElementById(domId);
+                        if (!canvas) return;
+                        const card = canvas.closest(".fov-card");
+                        const skel = card && card.querySelector(".fov-skeleton");
+                        if (skel) skel.style.display = "none";
+                        canvas.style.display = "";
+                        const ch = LangeChart.render(domId, entry.chart, { isMain: entry.kind !== "spread" });
+                        if (ch) charts.set(domId, ch);
+                    });
+                };
+                wait();
+            })
+            .catch(() => {/* charts are best-effort; the table still stands */});
     }
     window.loadStrategy = function (force) {
         const inp = readStratInputs();
@@ -1753,12 +1906,14 @@
             renderStrategy();
             return;
         }
-        const key = Math.round(inp.equity) + "|" + inp.risk;
+        const key = Math.round(inp.equity) + "|" + inp.risk + "|" + (inp.trend ? "T" : "F") + "|" + (inp.maxBps || "");
         if (!force && stratData && stratKey === key) return;   // already current
         if (stratInflight) return;
         const tbody = document.getElementById("strat-tbody");
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;"><span class="spinner-border spinner-border-sm"></span> Computing signals…</td></tr>';
-        const qs = `account=${encodeURIComponent(inp.equity)}&risk=${encodeURIComponent(inp.risk)}`;
+        if (tbody) tbody.innerHTML = '<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;"><span class="spinner-border spinner-border-sm"></span> Computing signals…</td></tr>';
+        let qs = `account=${encodeURIComponent(inp.equity)}&risk=${encodeURIComponent(inp.risk)}&trend=${inp.trend}`;
+        if (inp.maxBps != null) qs += `&max_bps=${encodeURIComponent(inp.maxBps)}`;
+        if (force) qs += "&force=true";
         stratInflight = fetch(`/futures/api/strategy?${qs}`, { headers: { "Accept": "application/json" } })
             .then(r => {
                 if (r.status === 401) return { error: "Members only — please sign in again." };
@@ -1769,9 +1924,11 @@
             .catch(err => { stratData = { error: "Could not compute signals: " + err.message }; renderStrategy(); })
             .finally(() => { stratInflight = null; });
     };
-    ["strat-equity", "strat-risk"].forEach(id => {
+    // Re-pick/re-size from the cached universe on input changes (force=false);
+    // only the explicit "Recompute" button rebuilds the universe (force=true).
+    ["strat-equity", "strat-risk", "strat-trend", "strat-maxbps"].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener("change", () => loadStrategy(true));
+        if (el) el.addEventListener("change", () => loadStrategy(false));
     });
     const stratEq = document.getElementById("strat-equity");
     if (stratEq) stratEq.addEventListener("blur", () => {

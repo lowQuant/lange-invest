@@ -89,6 +89,9 @@ STRAT_STOP_ATR = 3.0
 # A c1−c2 calendar spread joins the tradable universe only if its own signal has
 # fired at least this many times historically (thin track records are dropped).
 STRAT_MIN_SPREAD_FIRINGS = 10
+# Bumped whenever the cached per-instrument record schema changes, so an old
+# cache file (missing new fields) is recomputed instead of served stale.
+STRAT_SCHEMA_VERSION = 2
 STRAT_RISK_DEFAULT = 0.001
 STRAT_ACCOUNT_DEFAULT = 150_000.0
 # Exposure caps as multiples of account equity (per-position / per-side / total).
@@ -653,9 +656,15 @@ def _states_both(series: pd.Series) -> dict[str, Any]:
         target = _strategy_signal(series, use_trend=use_trend)
         if not use_trend:
             firings = _count_firings(target)
-        direction, entry_i, entry_px, _ = _replay_loser_filter(series, target)
+        direction, entry_i, entry_px, last_result = _replay_loser_filter(series, target)
         out[key] = {
+            # dir = actual position after the loser filter; raw_dir = the bare
+            # Donchian breakout state on the last bar (what fired, ignoring the
+            # filter); last_result = win/loss of the last closed trade, which is
+            # what decides whether a fresh breakout is taken or stood aside.
             "dir": int(direction),
+            "raw_dir": int(target[-1]) if len(target) else 0,
+            "last_result": int(last_result),
             "entry_px": None if entry_i < 0 else float(entry_px),
             "entry_date": None if entry_i < 0 else series.index[entry_i].date().isoformat(),
         }
@@ -847,7 +856,10 @@ def _futures_fingerprint(symbols: list[str]) -> str | None:
         parts.append(f"{s}|{d.get('rows')}|{d.get('last_update')}|{d.get('date_range')}")
     if not parts:
         return None
-    return hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()
+    digest = hashlib.sha1("\n".join(parts).encode("utf-8")).hexdigest()
+    # Prefix the schema version so a record-shape change invalidates old caches
+    # even when the underlying data is byte-for-byte identical.
+    return f"v{STRAT_SCHEMA_VERSION}:{digest}"
 
 
 def _compute_universe_records() -> dict[str, Any]:
@@ -940,19 +952,28 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
                            min_bps: float | None = None,
                            max_bps: float | None = None,
                            force: bool = False) -> dict[str, Any]:
-    """Current open positions of the Donchian + loser-filter strategy.
+    """All live signals of the Donchian + loser-filter strategy, classified.
 
     Runs on the **combined universe** — every market's outright AND its c1−c2
     calendar spread are independent instruments carrying their own signal. The
-    expensive signal replay is cached (per the ``futures`` fingerprint); this
-    call only re-picks the armed instruments for the chosen trend variant and
-    sizes them for ``account`` at ``risk`` per position under the exposure caps
-    (per-position 1×, per-side 2×, total 4× of cash).
+    expensive replay is cached (per the ``futures`` fingerprint); this call picks
+    the chosen trend variant and returns *every instrument with a live signal*,
+    not just the ones in the book.
 
-    ``use_trend`` toggles the optional 200-day SMA gate (default off). ``min_bps``
-    / ``max_bps`` filter instruments by their **average daily dollar move** as a
-    fraction of the account (in basis points) — the signal universe is always
-    computed in full, the band only narrows which positions are taken.
+    Each row is classified two ways so the UI can group them:
+
+      * ``kind``    — ``outright`` (single contract) vs ``spread`` (synthetic).
+      * ``in_book`` — whether the loser filter is letting us hold it. A live
+        breakout whose **last closed trade won** is stood aside (``in_book`` is
+        False, ``last_result`` 1); one whose last trade **lost** or never traded
+        is armed and held (``in_book`` True). This is the "previous was a
+        loser / winner" split.
+
+    Only the in-book rows are *sized* (with the per-position 1× / per-side 2× /
+    total 4× caps); stood-aside rows carry the signal and its avg daily $ move
+    but no contracts. ``use_trend`` toggles the optional 200-day SMA gate
+    (default off). ``min_bps`` / ``max_bps`` filter every row by its average
+    daily $ move as bps of the account (the universe is always computed in full).
     Returns ``{positions, summary, as_of, source, computed_at, error}``.
     """
     _expire_stale()
@@ -968,20 +989,31 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
     instruments = payload.get("instruments", [])
     as_of = payload.get("as_of")
 
-    # Armed instruments under the chosen variant, each tagged with its bps
-    # footprint (one contract's avg daily $ move as bps of the account).
-    armed: list[dict[str, Any]] = []
+    # Every instrument with a live signal (a breakout fired, or we hold one).
+    rows: list[dict[str, Any]] = []
     for r in instruments:
         st = r.get(variant) or {}
-        if st.get("dir", 0) == 0:
-            continue
+        raw_dir = int(st.get("raw_dir", 0))
+        in_dir = int(st.get("dir", 0))
+        if raw_dir == 0 and in_dir == 0:
+            continue  # genuinely flat — not a signal
         move = r.get("avg_dollar_move")
         bps = (move / account * 1e4) if (move and account > 0) else None
-        armed.append({**r, "dir": st["dir"], "entry_px": st["entry_px"],
-                      "entry_date": st["entry_date"], "bps": bps})
+        rows.append({
+            "id": r["id"], "symbol": r["sym"], "name": r["name"], "sector": r["sector"],
+            "is_micro": r["is_micro"], "kind": r["kind"],
+            "signal": raw_dir,                 # bare Donchian direction
+            "side": in_dir if in_dir != 0 else raw_dir,
+            "in_book": in_dir != 0,            # loser filter is holding it
+            "last_result": int(st.get("last_result", 0)),
+            "entry_px": st.get("entry_px"), "entry_date": st.get("entry_date"),
+            "last": r["last"], "atr": r["atr"], "point_value": r["mult"],
+            "avg_dollar_move": move, "bps": bps, "firings": r.get("firings"),
+            "contracts": 0, "notional": 0.0, "daily_risk": 0.0, "stop": None,
+        })
 
     # bps band — display/selection filter only; the universe above is full.
-    n_armed = len(armed)
+    n_signals = len(rows)
     if min_bps is not None or max_bps is not None:
         def _in_band(a: dict[str, Any]) -> bool:
             b = a["bps"]
@@ -992,19 +1024,17 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
             if max_bps is not None and b > max_bps:
                 return False
             return True
-        armed = [a for a in armed if _in_band(a)]
-    n_filtered = n_armed - len(armed)
+        rows = [a for a in rows if _in_band(a)]
+    n_filtered = n_signals - len(rows)
 
-    # Size oldest-entry-first so the per-side / total caps fill in trade order.
-    armed.sort(key=lambda r: (r["entry_date"] or ""))
-    positions: list[dict[str, Any]] = []
+    # Size the actual book (in-book rows) oldest-entry-first so the per-side /
+    # total caps fill in trade order. Stood-aside rows are left un-sized.
+    book = [p for p in rows if p["in_book"]]
+    book.sort(key=lambda p: (p["entry_date"] or ""))
     gl = gs = 0.0
     n_sized = n_long = n_short = 0
-    for r in armed:
-        atr, mult, last, d = r["atr"], r["mult"], r["last"], r["dir"]
-        contracts = 0
-        notional = daily_risk = 0.0
-        stop = None
+    for p in book:
+        atr, mult, last, d = p["atr"], p["point_value"], p["last"], p["side"]
         if atr and mult and atr > 0 and mult > 0:
             raw_n = risk * account / (atr * mult)
             cands = [raw_n]
@@ -1019,41 +1049,39 @@ def build_strategy_signals(account: float = STRAT_ACCOUNT_DEFAULT,
                 ]
             n = int(math.floor(min(cands)))
             if n >= 1:
-                contracts = n
-                notional = n * pc
-                daily_risk = n * atr * mult
+                p["contracts"] = n
+                p["notional"] = n * pc
+                p["daily_risk"] = n * atr * mult
                 if d > 0:
-                    gl += notional
+                    gl += p["notional"]
                     n_long += 1
                 else:
-                    gs += notional
+                    gs += p["notional"]
                     n_short += 1
                 n_sized += 1
-            if r["entry_px"] is not None:
-                stop = (r["entry_px"] - STRAT_STOP_ATR * atr) if d > 0 \
-                    else (r["entry_px"] + STRAT_STOP_ATR * atr)
-        positions.append({
-            "id": r["id"], "symbol": r["sym"], "name": r["name"], "sector": r["sector"],
-            "is_micro": r["is_micro"], "kind": r["kind"], "side": d,
-            "entry_px": r["entry_px"], "entry_date": r["entry_date"],
-            "last": last, "stop": stop, "atr": atr, "point_value": mult,
-            "avg_dollar_move": r.get("avg_dollar_move"), "bps": r.get("bps"),
-            "firings": r.get("firings"),
-            "contracts": contracts, "notional": notional, "daily_risk": daily_risk,
-        })
+            if p["entry_px"] is not None:
+                p["stop"] = (p["entry_px"] - STRAT_STOP_ATR * atr) if d > 0 \
+                    else (p["entry_px"] + STRAT_STOP_ATR * atr)
 
-    # Display order: sized positions first, largest notional on top.
-    positions.sort(key=lambda p: (p["contracts"] > 0, abs(p["notional"])), reverse=True)
-    n_spread = sum(1 for p in positions if p["kind"] == "spread" and p["contracts"] > 0)
+    # Display order: single before synthetic, in-book before stood-aside, then
+    # biggest notional / dollar move on top.
+    rows.sort(key=lambda p: (
+        p["kind"] != "outright", not p["in_book"],
+        -(p["notional"] or 0.0), -(p["avg_dollar_move"] or 0.0)))
+
+    def _grp(kind: str, in_book: bool) -> int:
+        return sum(1 for p in rows if p["kind"] == kind and p["in_book"] == in_book)
 
     summary = {
         "account": account, "risk": risk, "use_trend": use_trend,
-        "n_positions": len(positions), "n_sized": n_sized,
-        "n_long": n_long, "n_short": n_short, "n_spread": n_spread,
-        "n_universe": len(instruments), "n_armed": n_armed, "n_filtered": n_filtered,
+        "n_signals": len(rows), "n_sized": n_sized, "n_filtered": n_filtered,
+        "n_long": n_long, "n_short": n_short,
+        "n_single_book": _grp("outright", True), "n_single_aside": _grp("outright", False),
+        "n_spread_book": _grp("spread", True), "n_spread_aside": _grp("spread", False),
+        "n_universe": len(instruments),
         "gross_long": gl, "gross_short": gs, "gross_total": gl + gs,
         "margin_est": STRAT_MARGIN_PCT * (gl + gs),
     }
-    return {"positions": positions, "summary": summary, "as_of": as_of,
+    return {"positions": rows, "summary": summary, "as_of": as_of,
             "source": payload.get("source"), "computed_at": payload.get("computed_at"),
             "error": None}

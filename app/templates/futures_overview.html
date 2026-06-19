@@ -379,58 +379,73 @@
 {# ── Strategy (members-only): b08 Donchian + loser-filter live signals ─────── #}
 <div id="fov-strategy" style="display:none;">
 {% if user %}
-    <div class="qt-panel mb-3">
-        <div class="qt-panel-head">
-            <span class="qt-panel-head-title"><i class="bi bi-shield-lock"></i> Donchian breakout &middot; loser-filter</span>
-            <span class="label-mono" id="strat-asof" style="color:var(--ink-4);"></span>
-        </div>
-        <div class="qt-panel-body sim-form">
-            <div class="sim-input-row">
-                <label class="sim-input">
-                    <span class="ac-lbl">Account size</span>
-                    <div class="sim-input-field">
-                        <span class="sim-prefix">$</span>
-                        <input type="text" id="strat-equity" value="150,000" inputmode="numeric">
-                    </div>
-                </label>
-                <label class="sim-input">
-                    <span class="ac-lbl">Risk per position</span>
-                    <div class="sim-input-field">
-                        <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
-                        <span class="sim-suffix">%</span>
-                    </div>
-                </label>
-                <label class="sim-input">
-                    <span class="ac-lbl">Max daily $ impact <span class="ac-lbl-note">per contract, optional</span></span>
-                    <div class="sim-input-field">
-                        <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
-                        <span class="sim-suffix">bps</span>
-                    </div>
-                </label>
+    {# ── Article-style intro — short prose, no box ── #}
+    <header class="strat-intro">
+        <span class="eyebrow"><i class="bi bi-shield-lock"></i> Strategy &middot; members</span>
+        <h2 class="strat-intro-title">Donchian breakout, loser-filtered</h2>
+        <p class="strat-intro-lead">
+            A fresh 50-day high (or low) opens the trade and the opposite 20-day channel closes it — but a
+            market only re-arms after its last trade <em>lost</em>, which is what cuts the turnover and the
+            drawdown. The signal runs on every market's outright <em>and</em> its c1−c2 calendar spread as
+            independent instruments. <a href="#" id="strat-notes-link" onclick="toggleStratNotes();return false;">Method notes</a>
+        </p>
+        <p class="strat-notes" id="strat-notes" style="display:none;">
+            The 200-day SMA trend gate is optional and off by default — backtests showed it adds nothing once
+            the loser filter is on. Positions size to <code>risk × equity / (ATR<sub>100</sub> × point value)</code>,
+            capped at 1× / 2× / 4× of cash per position / side / total. <em>Avg daily&nbsp;$</em> is
+            ATR<sub>100</sub> × point value (one contract's typical daily swing); the bps filter narrows the
+            book by that move as a fraction of the account. The full universe is always computed — the filter
+            only changes what's shown. A direction check, not investment advice.
+        </p>
+    </header>
+
+    {# ── Small collapsible sizing & filter menu (results stay the focus) ── #}
+    <div class="strat-toolbar">
+        <button class="strat-toolbar-toggle" id="strat-controls-toggle"
+                onclick="toggleStratControls()" aria-expanded="false">
+            <i class="bi bi-sliders"></i> Sizing &amp; filters
+            <span class="strat-toolbar-summary" id="strat-toolbar-summary"></span>
+            <i class="bi bi-chevron-down strat-toolbar-caret"></i>
+        </button>
+        <span class="label-mono strat-asof" id="strat-asof"></span>
+    </div>
+    <div class="strat-controls" id="strat-controls" style="display:none;">
+        <label class="strat-ctl">
+            <span class="ac-lbl">Account</span>
+            <span class="strat-ctl-field"><span class="sim-prefix">$</span>
+                <input type="text" id="strat-equity" value="150,000" inputmode="numeric"></span>
+        </label>
+        <label class="strat-ctl">
+            <span class="ac-lbl">Risk / position</span>
+            <span class="strat-ctl-field">
+                <input type="number" id="strat-risk" value="0.10" min="0.01" max="2" step="0.01">
+                <span class="sim-suffix">%</span></span>
+        </label>
+        <label class="strat-ctl">
+            <span class="ac-lbl">Max daily $ <span class="ac-lbl-note">optional</span></span>
+            <span class="strat-ctl-field">
+                <input type="number" id="strat-maxbps" placeholder="off" min="0" step="1">
+                <span class="sim-suffix">bps</span></span>
+        </label>
+        <label class="strat-switch" title="Optional 200-day SMA trend gate. Backtests showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
+            <input type="checkbox" id="strat-trend">
+            <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
+            <span class="ac-lbl">200-day trend filter</span>
+        </label>
+        <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
+            <i class="bi bi-arrow-repeat"></i> Recompute
+        </button>
+        <div class="strat-chip-filters">
+            <span class="ac-lbl">Show</span>
+            <div class="fov-chip-group" id="strat-kind-chips">
+                <button class="fov-chip active" data-kind="all">All</button>
+                <button class="fov-chip" data-kind="outright">Single</button>
+                <button class="fov-chip" data-kind="spread">Synthetic</button>
             </div>
-            <div class="sim-controls-row">
-                <label class="strat-switch" title="Toggle the optional 200-day SMA trend gate. The combined-universe backtest showed it neither lifts Sharpe nor cuts drawdown once the loser filter is on, so it defaults off.">
-                    <input type="checkbox" id="strat-trend">
-                    <span class="strat-switch-track"><span class="strat-switch-thumb"></span></span>
-                    <span class="ac-lbl">200-day trend filter</span>
-                </label>
-                <button class="btn btn-sm btn-outline-secondary strat-refresh" onclick="loadStrategy(true)">
-                    <i class="bi bi-arrow-repeat"></i> Recompute
-                </button>
-            </div>
-            <div class="sim-formula">
-                Combined universe: every market's <strong>outright</strong> and its <strong>c1−c2 calendar
-                spread</strong> are independent instruments carrying the same signal (a spread joins only after
-                ≥10 historical firings). Entry on a fresh <strong>50-day</strong> high (long) or low (short);
-                exit on the opposite <strong>20-day</strong> channel. The optional <strong>200-day SMA</strong>
-                gate is <em>off by default</em> — backtests showed it adds nothing once the loser filter is on.
-                The <strong>loser filter</strong> only arms a market after its last closed trade <em>lost</em>
-                (or it never traded) — after a winner it stands aside, which is what cuts turnover and drawdown.
-                Sized <code>contracts = risk × equity / (ATR<sub>100</sub> × point value)</code>, capped at
-                1× / 2× / 4× of cash per position / side / total. <strong>Avg daily $ move</strong> is
-                ATR<sub>100</sub> × point value; the <strong>bps</strong> filter narrows the book by that move
-                as a fraction of the account. The full signal universe is always computed — the filter only
-                changes what's shown. A direction check, not investment advice.
+            <div class="fov-chip-group" id="strat-status-chips">
+                <button class="fov-chip active" data-status="all">All</button>
+                <button class="fov-chip" data-status="book">In the book</button>
+                <button class="fov-chip" data-status="aside">Stood aside</button>
             </div>
         </div>
     </div>
@@ -441,7 +456,7 @@
 
     <div class="qt-panel">
         <div class="qt-panel-head">
-            <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Open positions</span>
+            <span class="qt-panel-head-title"><i class="bi bi-list-columns-reverse"></i> Live signals</span>
             <span class="label-mono" id="strat-totals" style="color:var(--ink-3);"></span>
         </div>
         <div class="qt-panel-body dense" style="padding:0;">
@@ -449,27 +464,28 @@
             <table class="table table-sm mb-0 fov-table strat-table">
                 <thead>
                     <tr>
-                        <th>Symbol</th><th>Name</th><th>Sector</th><th>Side</th>
+                        <th>Symbol</th><th>Name</th><th>Sector</th><th>Signal</th>
+                        <th>Last trade</th>
                         <th class="text-end">Entry<span class="strat-foot">*</span></th>
                         <th class="text-end">Last</th>
-                        <th class="text-end">Stop 3·ATR</th>
                         <th class="text-end">ATR(100)</th>
                         <th class="text-end">Pt&nbsp;value</th>
                         <th class="text-end">Avg&nbsp;daily&nbsp;$<span class="strat-foot">†</span></th>
                         <th class="text-end">Contracts</th>
                         <th class="text-end">Notional</th>
-                        <th class="text-end">Margin&nbsp;10%</th>
                     </tr>
                 </thead>
                 <tbody id="strat-tbody">
-                    <tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>
+                    <tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>
                 </tbody>
             </table>
             </div>
             <div class="strat-footnote label-mono">
-                <span class="strat-foot">*</span> entry &amp; stop are continuous (back-adjusted) levels — they match real
-                quotes within the current contract.
-                <span class="strat-foot">†</span> avg daily $ move = ATR(100) × point value (one contract's typical daily P&amp;L swing).
+                <span class="strat-foot">*</span> entry &amp; stop levels are continuous (back-adjusted) — they match real
+                quotes within the current contract. Only <strong>in-the-book</strong> rows (last trade lost / none) are
+                sized; <strong>stood-aside</strong> rows carry a live breakout whose last trade <em>won</em>, so the
+                loser filter holds fire.
+                <span class="strat-foot">†</span> avg daily $ = ATR(100) × point value (one contract's typical daily swing).
             </div>
         </div>
     </div>
@@ -776,11 +792,87 @@
     .fov-tab-locked .bi { color: var(--signature); }
 
     /* Strategy panel */
-    .strat-refresh { align-self: flex-end; white-space: nowrap; }
-    .sim-controls-row {
-        display: flex; align-items: center; justify-content: space-between;
-        gap: 1rem; flex-wrap: wrap; margin-top: .85rem;
+    .strat-refresh { white-space: nowrap; }
+
+    /* Article-style intro (no box) */
+    .strat-intro { max-width: 70ch; margin: .25rem 0 1.4rem; }
+    .strat-intro-title {
+        font-family: var(--serif); font-weight: 500; font-size: 1.5rem;
+        margin: .35rem 0 .5rem; color: var(--ink-1); letter-spacing: .01em;
     }
+    .strat-intro-lead { color: var(--ink-2); font-size: .95rem; line-height: 1.6; margin: 0; }
+    .strat-intro-lead a { color: var(--signature); text-decoration: none; border-bottom: 1px dotted var(--signature); }
+    .strat-notes {
+        margin: .7rem 0 0; padding-top: .7rem; border-top: 1px solid var(--line-1);
+        color: var(--ink-3); font-size: .82rem; line-height: 1.6;
+    }
+    .strat-notes code { background: var(--bg-3); padding: .1rem .35rem; border-radius: 3px; color: var(--ink-1); }
+
+    /* Compact, collapsible sizing & filter menu */
+    .strat-toolbar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 1rem; flex-wrap: wrap; margin-bottom: .75rem;
+    }
+    .strat-toolbar-toggle {
+        display: inline-flex; align-items: center; gap: .5rem;
+        background: transparent; border: 1px solid var(--line-2); border-radius: 999px;
+        padding: .3rem .85rem; cursor: pointer; color: var(--ink-2);
+        font-family: var(--mono); font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+        transition: color .12s, border-color .12s, background .12s;
+    }
+    .strat-toolbar-toggle:hover { color: var(--ink-1); border-color: var(--line-3); }
+    .strat-toolbar-toggle .bi { color: var(--signature); }
+    .strat-toolbar-summary { color: var(--ink-4); text-transform: none; letter-spacing: 0; }
+    .strat-toolbar-caret { transition: transform .18s; }
+    .strat-toolbar-toggle[aria-expanded="true"] .strat-toolbar-caret { transform: rotate(180deg); }
+    .strat-asof { color: var(--ink-4); }
+    .strat-controls {
+        display: flex; align-items: flex-end; flex-wrap: wrap; gap: 1rem 1.25rem;
+        margin-bottom: 1rem; padding: .85rem 1rem;
+        border: 1px solid var(--line-2); border-radius: var(--radius); background: var(--bg-1);
+    }
+    .strat-ctl { display: flex; flex-direction: column; gap: .3rem; }
+    .strat-ctl-field {
+        display: inline-flex; align-items: center; gap: .35rem;
+        border: 1px solid var(--line-2); border-radius: 4px; background: var(--bg-1); padding: 0 .55rem;
+        transition: border-color .12s;
+    }
+    .strat-ctl-field:focus-within { border-color: var(--signature); }
+    .strat-ctl-field input {
+        border: 0; outline: 0; background: transparent; width: 7.5ch;
+        font-family: var(--mono); font-size: .85rem; font-variant-numeric: tabular-nums;
+        color: var(--ink-1); padding: .35rem 0;
+    }
+    .strat-controls .strat-switch { align-self: center; }
+    .strat-chip-filters {
+        display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+        width: 100%; margin-top: .2rem; padding-top: .7rem;
+        border-top: 1px solid var(--line-1);
+    }
+
+    /* Grouped signal table: section + sub-group header rows */
+    .strat-grp td {
+        background: var(--bg-2); border-top: 2px solid var(--line-2) !important;
+        font-family: var(--serif); font-size: .9rem; color: var(--ink-1);
+        padding: .55rem .75rem !important; letter-spacing: .02em;
+    }
+    .strat-grp .strat-grp-n { color: var(--ink-4); font-family: var(--mono); font-size: .7rem; margin-left: .4rem; }
+    .strat-subgrp td {
+        background: var(--bg-1); color: var(--ink-3);
+        font-family: var(--mono); font-size: .62rem; text-transform: uppercase; letter-spacing: .1em;
+        padding: .35rem .75rem !important; border-top: 1px solid var(--line-1) !important;
+    }
+    .strat-row-aside td { color: var(--ink-3); }
+    .strat-sig { display: inline-flex; align-items: center; gap: .3rem; font-family: var(--mono);
+        font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; padding: .1rem .45rem; border-radius: 3px; }
+    .strat-sig.long { color: var(--up); background: var(--up-dim); }
+    .strat-sig.short { color: var(--down); background: var(--down-dim); }
+    .strat-last { font-family: var(--mono); font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; }
+    .strat-last.win { color: var(--up); }
+    .strat-last.loss { color: var(--down); }
+    .strat-last.none { color: var(--ink-4); }
+    .strat-card-aside { border-style: dashed; opacity: .82; }
+
     /* Trend-filter toggle switch */
     .strat-switch { display: inline-flex; align-items: center; gap: .55rem; cursor: pointer; user-select: none; }
     .strat-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
@@ -1712,10 +1804,11 @@
         });
     };
 
-    // ── Strategy tab (members-only): b08 Donchian + loser-filter ──
+    // ── Strategy tab (members-only): Donchian + loser-filter ──
     let stratData = null;          // last computed payload
     let stratInflight = null;
     let stratKey = "";             // account|risk the loaded data was sized for
+    const stratFilters = { kind: "all", status: "all" };  // client-side table filters
 
     function readStratInputs() {
         const eqEl = document.getElementById("strat-equity");
@@ -1731,9 +1824,15 @@
             maxBps: isFinite(maxbps) && maxbps > 0 ? maxbps : null,
         };
     }
-    function stratSideBadge(side) {
-        return side === 1 ? '<span class="sim-side long">LONG</span>'
-                          : '<span class="sim-side short">SHORT</span>';
+    function sigBadge(side) {
+        return side === 1
+            ? '<span class="strat-sig long"><i class="bi bi-arrow-up-right"></i> long</span>'
+            : '<span class="strat-sig short"><i class="bi bi-arrow-down-right"></i> short</span>';
+    }
+    function lastTradeBadge(lr) {
+        if (lr === 1)  return '<span class="strat-last win">won</span>';
+        if (lr === -1) return '<span class="strat-last loss">lost</span>';
+        return '<span class="strat-last none">none</span>';
     }
     function renderStratSummary() {
         const s = stratData && stratData.summary;
@@ -1743,32 +1842,68 @@
         if (!s || !box) { if (panel) panel.style.display = "none"; return; }
         const acct = s.account || 0;
         const pct = v => acct > 0 ? ` <span class="label-mono" style="color:var(--ink-4);">${(100*v/acct).toFixed(0)}%</span>` : "";
-        const spreadStat = s.n_spread > 0
-            ? `<div class="strat-stat"><span class="v">${s.n_spread}</span><span class="l">via c1−c2</span></div>` : "";
+        const nSingle = (s.n_single_book || 0) + (s.n_single_aside || 0);
+        const nSpread = (s.n_spread_book || 0) + (s.n_spread_aside || 0);
+        const nBook = (s.n_single_book || 0) + (s.n_spread_book || 0);
         box.innerHTML =
-            `<div class="strat-stat"><span class="v">${s.n_sized}</span><span class="l">positions</span></div>
-             <div class="strat-stat"><span class="v long">${s.n_long}</span><span class="l">long</span></div>
-             <div class="strat-stat"><span class="v short">${s.n_short}</span><span class="l">short</span></div>
-             ${spreadStat}
-             <div class="strat-stat"><span class="v">${fmtMoney(s.gross_long)}${pct(s.gross_long)}</span><span class="l">gross long</span></div>
-             <div class="strat-stat"><span class="v">${fmtMoney(s.gross_short)}${pct(s.gross_short)}</span><span class="l">gross short</span></div>
+            `<div class="strat-stat"><span class="v">${s.n_signals}</span><span class="l">live signals</span></div>
+             <div class="strat-stat"><span class="v">${nSingle}</span><span class="l">single</span></div>
+             <div class="strat-stat"><span class="v">${nSpread}</span><span class="l">synthetic</span></div>
+             <div class="strat-stat"><span class="v long">${nBook}</span><span class="l">in the book</span></div>
+             <div class="strat-stat"><span class="v">${s.n_sized}</span><span class="l">sized &ge;1</span></div>
              <div class="strat-stat"><span class="v">${fmtMoney(s.gross_total)}${pct(s.gross_total)}</span><span class="l">gross total</span></div>
              <div class="strat-stat"><span class="v">${fmtMoney(s.margin_est)}${pct(s.margin_est)}</span><span class="l">est. margin 10%</span></div>`;
         panel.style.display = "";
         if (totals) {
-            const skipped = (s.n_positions || 0) - (s.n_sized || 0);
-            const parts = [`${s.n_sized} sized`];
-            if (skipped > 0) parts.push(`${skipped} below 1 contract`);
-            if (s.n_filtered > 0) parts.push(`${s.n_filtered} hidden by bps filter`);
+            const parts = [`${s.n_signals} signal${s.n_signals === 1 ? "" : "s"}`, `${s.n_sized} in the book`];
+            if (s.n_filtered > 0) parts.push(`${s.n_filtered} hidden by bps`);
             if (s.n_universe != null) parts.push(`${s.n_universe} in universe`);
             totals.textContent = parts.join(" · ");
         }
+    }
+    function stratRowHtml(p) {
+        const kindTag = p.kind === "spread"
+            ? ' <span class="strat-kind" title="c1−c2 calendar spread as a standalone instrument">c1−c2</span>' : "";
+        const qty = p.in_book
+            ? (p.contracts > 0 ? fmtInt(p.contracts) : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>')
+            : '<span class="label-mono" style="color:var(--ink-4);">—</span>';
+        const moveTxt = p.avg_dollar_move != null
+            ? `${fmtMoney(p.avg_dollar_move)}${p.bps != null ? ` <span class="label-mono" style="color:var(--ink-4);">${p.bps.toFixed(1)}bps</span>` : ""}`
+            : "—";
+        return `<tr class="${p.in_book ? "" : "strat-row-aside"}">
+            <td class="fov-sym">${p.symbol}${kindTag}</td>
+            <td>${p.name}</td>
+            <td><span class="fov-chip-pill">${p.sector}</span></td>
+            <td>${sigBadge(p.side)}</td>
+            <td>${lastTradeBadge(p.last_result)}</td>
+            <td class="text-end">${fmt4g(p.entry_px)}</td>
+            <td class="text-end">${fmt4g(p.last)}</td>
+            <td class="text-end">${fmt4g(p.atr)}</td>
+            <td class="text-end">${fmt4g(p.point_value)}</td>
+            <td class="text-end">${moveTxt}</td>
+            <td class="text-end">${qty}</td>
+            <td class="text-end">${p.in_book && p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
+        </tr>`;
+    }
+    function grpHeader(title, n) {
+        return `<tr class="strat-grp"><td colspan="12">${title}<span class="strat-grp-n">${n} signal${n === 1 ? "" : "s"}</span></td></tr>`;
+    }
+    function subHeader(title) {
+        return `<tr class="strat-subgrp"><td colspan="12">${title}</td></tr>`;
+    }
+    function filteredStratRows() {
+        const pos = (stratData && stratData.positions) || [];
+        return pos.filter(p =>
+            (stratFilters.kind === "all" || p.kind === stratFilters.kind) &&
+            (stratFilters.status === "all"
+              || (stratFilters.status === "book" && p.in_book)
+              || (stratFilters.status === "aside" && !p.in_book)));
     }
     function renderStrategy() {
         const tbody = document.getElementById("strat-tbody");
         if (!tbody) return;
         if (!stratData) {
-            tbody.innerHTML = '<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">Computing signals…</td></tr>';
             return;
         }
         const asof = document.getElementById("strat-asof");
@@ -1781,48 +1916,36 @@
             asof.innerHTML = bits.join(" · ");
         }
         if (stratData.error) {
-            tbody.innerHTML = `<tr><td colspan="13" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--down);padding:1.5rem;">${stratData.error}</td></tr>`;
             const sp = document.getElementById("strat-summary-panel"); if (sp) sp.style.display = "none";
             const tt = document.getElementById("strat-totals"); if (tt) tt.textContent = "";
             mountStratCharts([]);
             return;
         }
-        const pos = stratData.positions || [];
-        if (!pos.length) {
+        const rows = filteredStratRows();
+        if (!rows.length) {
             const s = stratData.summary || {};
             const msg = (s.n_filtered > 0)
-                ? `No markets pass the current bps filter — ${s.n_filtered} armed signal${s.n_filtered === 1 ? " was" : "s were"} hidden. Widen "Max daily $ impact" to see them.`
-                : "No markets are armed right now — every signal is flat or blocked by the loser filter (its last closed trade was a winner).";
-            tbody.innerHTML = `<tr><td colspan="13" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${msg}</td></tr>`;
+                ? `No signals match — ${s.n_filtered} hidden by the bps filter. Widen “Max daily $”.`
+                : "No live signals match the current filters.";
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center label-mono" style="color:var(--ink-4);padding:1.5rem;">${msg}</td></tr>`;
         } else {
-            tbody.innerHTML = pos.map(p => {
-                const kindTag = p.kind === "spread"
-                    ? ' <span class="strat-kind" title="The c1−c2 calendar spread traded as a standalone instrument; signal computed on the spread series itself">c1−c2</span>'
-                    : "";
-                const qty = p.contracts > 0 ? fmtInt(p.contracts)
-                          : '<span class="label-mono" style="color:var(--ink-4);">&lt;1</span>';
-                const moveTxt = p.avg_dollar_move != null
-                    ? `${fmtMoney(p.avg_dollar_move)}${p.bps != null ? ` <span class="label-mono" style="color:var(--ink-4);">${p.bps.toFixed(1)}bps</span>` : ""}`
-                    : "—";
-                return `<tr>
-                    <td class="fov-sym">${p.symbol}${kindTag}</td>
-                    <td>${p.name}</td>
-                    <td><span class="fov-chip-pill">${p.sector}</span></td>
-                    <td>${stratSideBadge(p.side)}</td>
-                    <td class="text-end">${fmt4g(p.entry_px)}</td>
-                    <td class="text-end">${fmt4g(p.last)}</td>
-                    <td class="text-end">${fmt4g(p.stop)}</td>
-                    <td class="text-end">${fmt4g(p.atr)}</td>
-                    <td class="text-end">${fmt4g(p.point_value)}</td>
-                    <td class="text-end">${moveTxt}</td>
-                    <td class="text-end">${qty}</td>
-                    <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional) : "—"}</td>
-                    <td class="text-end">${p.contracts > 0 ? fmtMoney(p.notional * 0.10) : "—"}</td>
-                </tr>`;
-            }).join("");
+            // Two-level grouping: single vs synthetic, then armed (last trade
+            // lost/none → in the book) vs stood-aside (last trade won).
+            let html = "";
+            [["outright", "Single contracts"], ["spread", "Synthetic · calendar spreads"]].forEach(([k, label]) => {
+                const kr = rows.filter(p => p.kind === k);
+                if (!kr.length) return;
+                html += grpHeader(label, kr.length);
+                const book = kr.filter(p => p.in_book);
+                const aside = kr.filter(p => !p.in_book);
+                if (book.length)  { html += subHeader("In the book — last trade lost / none (armed)"); html += book.map(stratRowHtml).join(""); }
+                if (aside.length) { html += subHeader("Stood aside — last trade won (loser filter holds fire)"); html += aside.map(stratRowHtml).join(""); }
+            });
+            tbody.innerHTML = html;
         }
         renderStratSummary();
-        mountStratCharts(pos);
+        mountStratCharts(rows);
     }
 
     // ── Strategy signal charts (markets currently in the book) ──
@@ -1842,19 +1965,22 @@
         const panel = document.getElementById("strat-charts-panel");
         if (!grid || !panel) return;
         destroyStratCharts();
-        // Only chart the markets we actually sized (≥1 contract) to keep the
-        // grid focused on the live book; cap so a huge book doesn't flood it.
-        const shown = pos.filter(p => p.contracts > 0).slice(0, 30);
+        // Chart every signal currently shown (in-book + stood-aside), capped so
+        // a big list doesn't flood the grid. In-book first.
+        const shown = pos.slice(0, 24);
         if (!shown.length) { panel.style.display = "none"; grid.innerHTML = ""; return; }
         grid.innerHTML = shown.map(p => {
             const sideCls = p.side === 1 ? "long" : "short";
             const sideTxt = p.side === 1 ? "LONG" : "SHORT";
+            const tag = p.in_book
+                ? (p.contracts > 0 ? `${sideTxt} &times;${fmtInt(p.contracts)}` : `${sideTxt} &lt;1`)
+                : `${sideTxt} · aside`;
             const kindTag = p.kind === "spread" ? ' <span class="strat-kind">c1−c2</span>' : "";
-            return `<article class="fov-card">
+            return `<article class="fov-card${p.in_book ? "" : " strat-card-aside"}">
                 <header class="fov-card-head">
                     <div><span class="fov-card-sym">${p.symbol}${kindTag}</span>
                          <span class="fov-card-name">${p.name}</span></div>
-                    <span class="sim-side ${sideCls}">${sideTxt} &times;${fmtInt(p.contracts)}</span>
+                    <span class="sim-side ${sideCls}">${tag}</span>
                 </header>
                 <div class="fov-card-meta">
                     ${p.sector ? `<span>${p.sector}</span>` : ""}
@@ -1928,13 +2054,59 @@
     // only the explicit "Recompute" button rebuilds the universe (force=true).
     ["strat-equity", "strat-risk", "strat-trend", "strat-maxbps"].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener("change", () => loadStrategy(false));
+        if (el) el.addEventListener("change", () => { updateStratToolbarSummary(); loadStrategy(false); });
     });
     const stratEq = document.getElementById("strat-equity");
     if (stratEq) stratEq.addEventListener("blur", () => {
         const n = parseMoney(stratEq.value);
         if (isFinite(n) && n > 0) stratEq.value = Math.round(n).toLocaleString("en-US");
+        updateStratToolbarSummary();
     });
+    // Kind / status chips filter the already-loaded table client-side (no fetch).
+    document.querySelectorAll("#strat-kind-chips .fov-chip").forEach(b => {
+        b.addEventListener("click", () => {
+            document.querySelectorAll("#strat-kind-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            b.classList.add("active"); stratFilters.kind = b.dataset.kind; renderStrategy();
+        });
+    });
+    document.querySelectorAll("#strat-status-chips .fov-chip").forEach(b => {
+        b.addEventListener("click", () => {
+            document.querySelectorAll("#strat-status-chips .fov-chip").forEach(x => x.classList.remove("active"));
+            b.classList.add("active"); stratFilters.status = b.dataset.status; renderStrategy();
+        });
+    });
+
+    // ── Collapsible sizing/filter menu + method notes ──
+    window.toggleStratControls = function () {
+        const box = document.getElementById("strat-controls");
+        const btn = document.getElementById("strat-controls-toggle");
+        if (!box || !btn) return;
+        const open = box.style.display === "none";
+        box.style.display = open ? "" : "none";
+        btn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    window.toggleStratNotes = function () {
+        const n = document.getElementById("strat-notes");
+        const link = document.getElementById("strat-notes-link");
+        if (!n) return;
+        const open = n.style.display === "none";
+        n.style.display = open ? "" : "none";
+        if (link) link.textContent = open ? "Hide notes" : "Method notes";
+    };
+    // Mirror the current settings into the collapsed toolbar so the menu can
+    // stay shut without hiding what the table is sized for.
+    function updateStratToolbarSummary() {
+        const el = document.getElementById("strat-toolbar-summary");
+        const inp = readStratInputs();
+        if (!el || !inp) return;
+        const bits = [];
+        if (isFinite(inp.equity) && inp.equity > 0) bits.push("$" + Math.round(inp.equity).toLocaleString("en-US"));
+        if (isFinite(inp.risk) && inp.risk > 0) bits.push((inp.risk * 100).toFixed(2) + "% risk");
+        bits.push(inp.trend ? "trend on" : "trend off");
+        if (inp.maxBps != null) bits.push("≤" + inp.maxBps + "bps");
+        el.textContent = bits.length ? "· " + bits.join(" · ") : "";
+    }
+    updateStratToolbarSummary();
 
     // ── Progressive payload load (batched: paint a first batch fast, stream
     //    the rest in the background) ──
